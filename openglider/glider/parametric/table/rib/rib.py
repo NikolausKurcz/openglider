@@ -1,5 +1,5 @@
 import logging
-from typing import Any
+from typing import Any, Self
 
 
 from openglider.glider.parametric.table.base import Keyword, RibTable, dto
@@ -22,6 +22,14 @@ class RibOffset(dto.DTO):
 
     def get_object(self) -> list:
         return [self.x, self.y, self.z]
+
+class RibRotation(dto.DTO):
+    x: Angle | None
+    y: Angle | None
+    z: Angle | None
+
+    def get_object(self) -> Self:
+        return self
 
 class SkinRib(dto.DTO):
     continued_min_end: Percentage
@@ -63,7 +71,8 @@ class SingleSkinTable(RibTable):
         "SkinRib": SkinRib,
         "SkinRib3": SkinRib3,
         "TrailingEdgeCut": TrailingEdgeCut,
-        "RibOffset": RibOffset
+        "RibOffset": RibOffset,
+        "RibRotation": RibRotation
     }
     
     def get_rib_args(self, rib_no: int, **kwargs: Any) -> dict[str, Any]:
@@ -77,20 +86,31 @@ class SingleSkinTable(RibTable):
     def get_singleskin_ribs(self, rib_no: int, **kwargs: Any) -> tuple[SingleSkinParameters, Angle] | None:
         return self.get_one(rib_no, ["SkinRib", "SkinRib3"], **kwargs)
     
-    def get_xrot(self, rib_no: int) -> float:
-        rotation = 0
-        if rot := self.get(rib_no, keywords=["XRot"]):
-            if len(rot) > 1:
-                logger.warning(f"multiple xrot values: {rot}; using the last one")
-            rotation = rot[-1]["angle"]
-        
-        return rotation
-    
     def get_offset(self, rib_no: int, **kwargs: Any) -> list[Length | Percentage]:
-        result = [0,0,0]
         offset: RibOffset | None = self.get_one(rib_no, ["RibOffset"], **kwargs)
 
         if offset is not None:
-            result = offset
-        
+            return [
+                offset.x,
+                offset.y,
+                offset.z
+            ]
+
+        return [
+            Length(0),
+            Length(0),
+            Length(0)
+        ]
+    
+    def get_rotation(self, rib_no: int, **kwargs: Any) -> RibRotation:
+        result: RibRotation | None = self.get_one(rib_no, ["RibRotation"], **kwargs)
+        if result is None:
+            result = RibRotation(x=None, y=None, z=None)
+
+
+        if rot := self.get(rib_no, keywords=["XRot"]):
+            if len(rot) > 1:
+                logger.warning(f"multiple xrot values: {rot}; using the last one")
+            result.x = rot[-1]["angle"]
+
         return result

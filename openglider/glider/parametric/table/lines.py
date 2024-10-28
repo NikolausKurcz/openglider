@@ -161,7 +161,7 @@ class LineSetTable(BaseModel):
         return cls(table=table, lower_attachment_points=lower_points)
     
     def scale(self, factor: float, scale_lower_floor: bool) -> Self:
-        offset_2nd_level = 0
+        offset_2nd_level = Length(0.)
         for row in range(self.table.num_rows):
             column = 1
             while column < self.table.num_columns:

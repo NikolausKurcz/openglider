@@ -21,6 +21,7 @@ from openglider.plots.sketches.shapeplot import ShapePlot
 from openglider.utils.table import Table
 
 from openglider.gui.app.main_window import MainWindow
+from openglider.vector.unit import Angle, Length, Percentage, Quantity
 
 logger = logging.getLogger(__name__)
 # TODO: Show & change data: Area, Aspect ratio, Span, Tip Chord, Tip center
@@ -139,7 +140,16 @@ class CurveSettings(QtWidgets.QWidget):
 
         self.curve_type_selector = EnumSelection(CurveEnum, self)
         self.curve_type_selector.changed.connect(self.update_curve_type)
+
+        self.curve_unit_selector = QtWidgets.QComboBox()
+        self.curve_unit_choices = ("", ) + Length.get_all_unit_variants() + Angle.get_all_unit_variants() + Percentage.get_all_unit_variants()
+        self.curve_unit_selector.addItem("")
+        for unit in self.curve_unit_choices:
+            self.curve_unit_selector.addItem(unit)
+
+        self.curve_unit_selector.activated.connect(self.update_unit)
         self.layout().addWidget(self.curve_type_selector)
+        self.layout().addWidget(self.curve_unit_selector)
 
         self.nodes_table = QTable()
         self.layout().addWidget(self.nodes_table)
@@ -164,6 +174,16 @@ class CurveSettings(QtWidgets.QWidget):
                 table[i+1, 1] = node[1]
         
         self.nodes_table.push_table(table)
+    
+    def update_unit(self, value: int) -> None:
+        unit = self.curve_unit_selector.currentIndex()
+
+
+        if self.curve is not None:
+            try:
+                self.curve.element.unit = self.curve_unit_choices[unit]
+            except Exception:
+                self.curve_unit_selector.setCurrentIndex(0)
 
     def update_curve_type(self) -> None:
         curve_cls = self.curve_type_selector.selected.value
@@ -177,6 +197,7 @@ class CurveSettings(QtWidgets.QWidget):
 
 
 class CurveWizard(Wizard):
+    project: GliderProject
     def __init__(self, app: MainWindow, project: GliderProject):
         super().__init__(app=app, project=project)
 
@@ -235,7 +256,7 @@ class CurveWizard(Wizard):
         p1 = euklid.vector.Vector2D([1., 0.5])
         p2 = euklid.vector.Vector2D([2., 0.5])
         p3 = euklid.vector.Vector2D([self.shape.rib_no-1, 0.5])
-        self.curve_list.add("unnamed", ShapeBSplineCurve([p1, p2, p3], self.shape))
+        self.curve_list.add("unnamed", ShapeBSplineCurve([p1, p2, p3], shape=self.shape))
         self.curve_list_selector.render()
         self.selection_changed()
 
