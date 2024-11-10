@@ -58,11 +58,6 @@ class MiniRibPlot:
 
         p = profile.profilepoint(x, y)
 
-
-        print("...")
-        print(p)
-        print("...")
-
         p_temp = list(p)
 
         p_temp[0] = p_temp[0] * profile.curve.nodes[0][0]
@@ -79,9 +74,6 @@ class MiniRibPlot:
 
         p1 = (p1+p2)/2
         p2 = p1 +euklid.vector.Vector2D([0.02,-0.005])
-
-        print(p1)
-        print(p2)
 
         _text = Text(self.minirib.name, p1, p2, size=0.01, align="center", valign=0)
 
@@ -116,12 +108,7 @@ class MiniRibPlot:
         middle_top = front_cuts[0][0]
         middle_bot = front_cuts[1][0]
 
-        buerzl = [
-            outer_minirib.get(stop),
-            outer_minirib.get(stop) + euklid.vector.Vector2D([t_e_allowance, 0]),
-            outer_minirib.get(start) + euklid.vector.Vector2D([t_e_allowance, 0]),
-            outer_minirib.get(start)
-            ]
+        
 
         #no sewing allowance front
         nosew = [
@@ -129,8 +116,25 @@ class MiniRibPlot:
             outer_minirib.get(middle_bot)
             ]
 
+
+        if self.minirib.trailing_edge_cut > 0:
+            #no sewing allowance back
+            end = [
+                outer_minirib.get(stop),
+                outer_minirib.get(start)
+            ]
+        else: 
+            #sewing allowance back
+            end = [
+            outer_minirib.get(stop),
+            outer_minirib.get(stop) + euklid.vector.Vector2D([t_e_allowance, 0]),
+            outer_minirib.get(start) + euklid.vector.Vector2D([t_e_allowance, 0]),
+            outer_minirib.get(start)
+            ]
+
+        
         contour = euklid.vector.PolyLine2D(
-             outer_minirib.get(start, middle_top).nodes + nosew + outer_minirib.get(middle_bot, stop).nodes + buerzl
+             outer_minirib.get(start, middle_top).nodes + nosew + outer_minirib.get(middle_bot, stop).nodes + end
         )
 
         return contour
