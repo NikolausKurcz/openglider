@@ -8,7 +8,7 @@ from openglider.airfoil import Profile3D
 from openglider.utils.dataclass import dataclass, Field
 
 from openglider.mesh import Mesh, triangulate
-from openglider.vector.unit import Length
+from openglider.vector.unit import Length, Percentage
 
 if TYPE_CHECKING:
     from openglider.glider.cell import Cell
@@ -23,12 +23,15 @@ class MiniRib:
     name: str="unnamed_minirib"
     material_code: str="unnamed_material"
     seam_allowance: Length = Length("10mm")
+    trailing_edge_cut: Length = Length("20mm")
+    mrib_num: int = 0
     function: euklid.vector.Interpolation = Field(default_factory=lambda: euklid.vector.Interpolation([]))
 
     class Config:
         arbitrary_types_allowed = True
 
     def __post_init__(self) -> None:
+
         p1_x = 2/3
 
         if self.function is None or len(self.function.nodes) == 0:
@@ -57,17 +60,24 @@ class MiniRib:
             return 1.
 
     def get_profile_3d(self, cell: Cell) -> Profile3D:
-        shape_with_bal = cell.basic_cell.midrib(self.yvalue, True, arc_argument=True).curve.nodes
-        shape_wo_bal = cell.basic_cell.midrib(self.yvalue, False).curve.nodes
 
-        points: list[euklid.vector.Vector3D] = []
-        for xval, with_bal, without_bal in zip(
-                cell.x_values, shape_with_bal, shape_wo_bal):
-            factor = self.get_multiplier(xval)  # factor ballooned/unb. (0-1)
-            point = without_bal + (with_bal - without_bal) * factor
-            points.append(point)
-
-        return Profile3D(curve=euklid.vector.PolyLine3D(points), x_values=cell.x_values)
+        return cell.rib_profiles_3d[self.mrib_num+1]  
+    
+    
+    
+    def convert_to_percentage(self, value: Percentage | Length, cell:Cell) -> Percentage:
+        if isinstance(value, Percentage):
+            return value
+        chord = cell.rib1.chord*(1-self.yvalue) + cell.rib2.chord*self.yvalue
+        return Percentage(value.si/chord)
+    
+    def convert_to_chordlength(self, value: Percentage | Length, cell:Cell) -> Length:
+        if isinstance(value, Length):
+            return value
+        
+        chord = cell.rib1.chord*(1-self.yvalue) + cell.rib2.chord*self.yvalue
+        
+        return Length(value.si*chord)
 
     def _get_lengths(self, cell: Cell) -> tuple[float, float]:
         flattened_cell = cell.get_flattened_cell()
@@ -93,10 +103,12 @@ class MiniRib:
         profile_2d = profile_3d.flatten()
         contour = profile_2d.curve
 
+        cutback = self.convert_to_percentage(self.trailing_edge_cut, cell).si
+
         start_bottom = profile_2d.get_ik(self.front_cut*profile_2d.curve.nodes[0][0])
-        end_bottom = profile_2d.get_ik(profile_2d.curve.nodes[0][0])
+        end_bottom = profile_2d.get_ik(self.back_cut*profile_2d.curve.nodes[0][0]-cutback)
         start_top = profile_2d.get_ik(-self.front_cut*profile_2d.curve.nodes[0][0])
-        end_top = profile_2d.get_ik(-profile_2d.curve.nodes[0][0])
+        end_top = profile_2d.get_ik(-self.back_cut*profile_2d.curve.nodes[0][0]+cutback)
 
         nodes_top = contour.get(end_top, start_top)
         nodes_bottom = contour.get(start_bottom, end_bottom)
