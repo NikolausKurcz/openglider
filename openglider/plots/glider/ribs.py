@@ -266,11 +266,11 @@ class RibPlot:
 
             if cell.rib1 == self.rib:
                 for diagonal in cell.diagonals + cell.straps:
-                    self.insert_drib_mark(diagonal.left)
+                    self.insert_drib_mark(diagonal.side1)
 
             elif cell.rib2 == self.rib:
                 for diagonal in cell.diagonals + cell.straps:  # type: ignore
-                    self.insert_drib_mark(diagonal.right)
+                    self.insert_drib_mark(diagonal.side2)
 
         for cut, is_entry in self.get_panel_cuts(glider):
             if -0.99 < cut.si and cut.si < 0.99:
@@ -279,7 +279,7 @@ class RibPlot:
                 elif self.config.insert_design_cuts:
                     self.insert_mark(cut, self.config.marks_panel_cut)
 
-        self._insert_text(self.rib.name)
+        self._insert_text()
         self.insert_controlpoints()
 
         # insert cut
@@ -359,8 +359,8 @@ class RibPlot:
             self.insert_mark(side.start_x, self.config.marks_diagonal_front)
             self.insert_mark(side.end_x, self.config.marks_diagonal_back)
         elif side.is_upper:
-            self.insert_mark(-side.start_x(self.rib), self.config.marks_diagonal_back)
-            self.insert_mark(-side.end_x(self.rib), self.config.marks_diagonal_front)
+            self.insert_mark(side.start_x(self.rib), self.config.marks_diagonal_back)
+            self.insert_mark(side.end_x(self.rib), self.config.marks_diagonal_front)
         else:
             p1 = self.get_point(side.start_x(self.rib), side.height)
             p2 = self.get_point(side.end_x(self.rib), side.height)
@@ -494,7 +494,8 @@ class RibPlot:
             for position in positions:
                 self.insert_mark(position, self.config.marks_attachment_point)
 
-    def _insert_text(self, text: str) -> None:
+    def _insert_text(self) -> None:
+        text = f"p{self.rib.name}"
         if self.config.rib_text_in_seam:
             inner, outer = self._get_inner_outer(self.config.rib_text_pos)
             diff = outer - inner

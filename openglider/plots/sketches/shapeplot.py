@@ -311,8 +311,8 @@ class ShapePlot:
         for cell_no in self._get_cell_range(left):
             cell = self.glider_3d.cells[cell_no]
             for diagonal in cell.straps:
-                left_x_values = [abs(x) for x in (diagonal.left.start_x(cell.rib1), diagonal.left.end_x(cell.rib1))]
-                right_x_values = [abs(x) for x in (diagonal.right.start_x(cell.rib2), diagonal.right.end_x(cell.rib2))]
+                left_x_values = [abs(x) for x in (diagonal.side1.start_x(cell.rib1), diagonal.side1.end_x(cell.rib1))]
+                right_x_values = [abs(x) for x in (diagonal.side2.start_x(cell.rib2), diagonal.side2.end_x(cell.rib2))]
 
                 points_left = [shape.get_point(cell_no, p) for p in left_x_values]
                 points_right = [shape.get_point(cell_no+1, p) for p in right_x_values]
@@ -327,8 +327,8 @@ class ShapePlot:
         for cell_no in self._get_cell_range(left):
             cell = self.glider_3d.cells[cell_no]
             for diagonal in cell.diagonals:
-                left_x_values = [abs(x) for x in (diagonal.left.start_x(cell.rib1), diagonal.left.end_x(cell.rib1))]
-                right_x_values = [abs(x) for x in (diagonal.right.start_x(cell.rib2), diagonal.right.end_x(cell.rib2))]
+                left_x_values = [abs(x) for x in (diagonal.side1.start_x(cell.rib1), diagonal.side1.end_x(cell.rib1))]
+                right_x_values = [abs(x) for x in (diagonal.side2.start_x(cell.rib2), diagonal.side2.end_x(cell.rib2))]
 
                 points_left = [shape.get_point(cell_no, p) for p in left_x_values]
                 points_right = [shape.get_point(cell_no+1, p) for p in right_x_values]
@@ -395,7 +395,9 @@ class ShapePlot:
         
         text_width = self.glider_3d.span / 300
         diff_vect = euklid.vector.Vector2D([text_width, 0])
-        def insert_line(glider_line: Line, index: int) -> PlotPart:
+        def insert_line(glider_line: Line, index: int) -> None:
+            if glider_line.line_type.name == "riser":
+                return
             pp = PlotPart()
             layer = pp.layers[f"line_{glider_line.name}"]
             line = euklid.vector.PolyLine2D([
@@ -417,7 +419,7 @@ class ShapePlot:
             pp.layers["text"] += text
             layer += [line]
 
-            return pp
+            self.drawing.parts.append(pp)
 
         i = 0
         for node in lower:
@@ -426,10 +428,11 @@ class ShapePlot:
             base_lines_sorted = self.glider_3d.lineset.sort_lines(base_lines, by_names=True)
 
             for line in base_lines_sorted:
-                self.drawing.parts.append(insert_line(line, i))
+                if line.line_type.name == "riser":
+                    insert_line(line, i)
 
                 for upper_line in all_upper_lines(line.upper_node):
-                    self.drawing.parts.append(insert_line(upper_line, i))
+                    insert_line(upper_line, i)
             
                 i += 1
 

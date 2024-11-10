@@ -3,12 +3,11 @@ import logging
 import euklid
 import string
 import subprocess
-from asyncio.log import logger
 from typing import Any
 from pathlib import Path
 
 import openglider.glider
-from openglider.glider.cell.diagonals import DiagonalSide
+from openglider.glider.cell.diagonals import DiagonalRib, DiagonalSide
 from openglider.glider.cell.panel import Panel
 from openglider.glider.rib.rib import Rib
 import openglider.plots.cuts
@@ -181,7 +180,7 @@ class Patterns(PatternsNew):
 
     @staticmethod
     def set_names_straps(glider: Glider) -> None:
-        logger.warn(f"rename")
+        logger.warn("rename")
         curves = glider.get_attachment_point_layers()
 
         for cell_no, cell in enumerate(glider.cells):
@@ -206,17 +205,13 @@ class Patterns(PatternsNew):
                 layers_between[name] += 1
 
                 return f"{name}{layers_between[name]}"
-                
-            straps = cell.straps[:]
-            straps.sort(key=lambda strap: strap.get_average_x())
-            for strap in straps:
-                strap.name = f"{cell_no+1}{get_name(strap.left, cell.rib1)}"
+            
+            def rename_straps(straps: list[DiagonalRib], prefix: str = ""):
+                straps = list(straps)
+                straps.sort(key=lambda strap: abs(strap.get_average_x()))
+                for strap in straps:
+                    strap.name = f"{prefix}{cell_no+1}{get_name(strap.side1, cell.rib1)}"
 
-            layers_between = {}
-            diagonals = cell.diagonals[:]
-            diagonals.sort(key=lambda diagonal: diagonal.get_average_x())
-            for diagonal in diagonals:
-                if diagonal.left.height < 0:
-                    diagonal.name = f"D{cell_no+1}{get_name(diagonal.left, cell.rib1)}"
-                else:
-                    diagonal.name = f"D{cell_no+1}{get_name(diagonal.right, cell.rib2)}"
+            rename_straps(filter(lambda strap: strap.is_lower, cell.straps), "B")
+            rename_straps(filter(lambda strap: not strap.is_lower, cell.straps), "T")
+            rename_straps(cell.diagonals[:], "D")

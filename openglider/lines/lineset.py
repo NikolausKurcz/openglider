@@ -44,9 +44,15 @@ class LineLength:
 
         return length
 
+    def get_cutting_length(self) -> float:
+        length = self.get_length()
+        length += self.seam_correction
+
+        return length
+
+
     def get_length(self) -> float:
         length = self.get_checklength()
-        length += self.seam_correction
         length += self.knot_correction
 
         return length
@@ -59,7 +65,7 @@ class LineSet:
     """
     Set of different lines
     """
-    calculate_sag = True
+    calculate_sag: bool = True
     knot_corrections = KnotCorrections.read_csv(os.path.join(os.path.dirname(__file__), "knots.csv"))
     mat: SagMatrix
 
@@ -256,7 +262,7 @@ class LineSet:
             mesh += line.get_mesh(numpoints)
         return mesh
 
-    def recalc(self, calculate_sag: bool=True, glider: Glider | None=None, iterations: int=5) -> LineSet:
+    def recalc(self, glider: Glider | None=None, iterations: int=5) -> LineSet:
         """
         Recalculate Lineset Geometry.
         if LineSet.calculate_sag = True, drag induced sag will be calculated
@@ -273,8 +279,6 @@ class LineSet:
             for rib in glider.ribs:
                 for p in rib.attachment_points:
                     p.get_position(rib)
-
-        self.calculate_sag = calculate_sag
 
         for line in self.lines:
             line.v_inf = self.v_inf
@@ -339,6 +343,7 @@ class LineSet:
             self.mat.insert_type_1_upper(line, up)
         else:
             self.mat.insert_type_2_upper(line)
+
         for u in up:
             self._calc_matrix_entries(u)
 
@@ -510,7 +515,9 @@ class LineSet:
     def total_length(self) -> float:
         length = 0.
         for line in self.lines:
-            length += line.get_stretched_length() + line.trim_correction.si
+            length += line.get_stretched_length()
+            if line.trim_correction is not None:
+                length += line.trim_correction.si
         return length
     
     def get_consumption(self) -> dict[LineType, float]:
@@ -681,13 +688,16 @@ class LineSet:
 
             knot_correction = self.knot_corrections.get(lower_line.line_type, line.line_type, total_lines)[line_no]
 
+        trim_correction = 0.
+        if line.trim_correction is not None:
+            trim_correction = line.trim_correction.si
 
         return LineLength(
             line.get_stretched_length(sag=with_sag, pre_load=pre_load),
             line.line_type.seam_correction,
             loop_correction,
             knot_correction,
-            line.trim_correction.si
+            trim_correction
         )
     
     def get_checklength(self, node: Node, with_sag: bool=True, pre_load: float = 50) -> float:
@@ -696,7 +706,7 @@ class LineSet:
         while lines := self.get_lower_connected_lines(last_node):
             if len(lines) != 1:
                 raise ValueError("more than one line connected!")
-            line_length = self.get_line_length(lines[0], with_sag, pre_load)
+            line_length = self.get_line_length(lines[0], self.calculate_sag, pre_load)
 
             length += line_length.get_checklength()
             
@@ -714,26 +724,9 @@ class LineSet:
         line_type_table = self._get_lines_table(lambda line: [f"{line.line_type.name} ({line.color})"], insert_node_names=False)
         line_color_table = self._get_lines_table(lambda line: [line.color], insert_node_names=False)
 
-        def get_checklength(line: Line, upper_lines: Any) -> list[float]:
-            line_length = self.get_line_length(line).get_checklength()
-            
-            if not len(upper_lines):
-                return [line_length]
-            else:
-                lengths = []
-                for upper in upper_lines:
-                    lengths += get_checklength(*upper)
-                
-                return [
-                    length + line_length for length in lengths
-                ]
-        
-        checklength_values = []
-        for line, upper_line in self.create_tree():
-            checklength_values += get_checklength(line, upper_line)
+        checklengths = self.get_checklengths()
         checklength_table = Table()
-        
-        for index, length in enumerate(checklength_values):
+        for index, length in enumerate(checklengths.values()):
             checklength_table[index+1, 0] = round(1000*length)
 
         length_table.append_right(checklength_table)
@@ -743,6 +736,42 @@ class LineSet:
         length_table.append_right(line_color_table)
 
         return length_table
+    
+    def get_checklengths(self) -> dict[str, float]:
+        def get_checklength(line: Line, upper_lines: Any) -> list[tuple[str, float]]:
+            line_length = self.get_line_length(line).get_checklength()
+            
+            if not len(upper_lines):
+                return [(line.upper_node.name, line_length)]
+            else:
+                lengths = []
+                for upper in upper_lines:
+                    lengths += get_checklength(*upper)
+                
+                return [
+                    (name, length + line_length) for name, length in lengths
+                ]
+        
+        checklength_values = []
+        for line, upper_line in self.create_tree():
+            checklength_values += get_checklength(line, upper_line)
+
+        return dict(checklength_values)
+
+    def get_checksheet(self) -> Table:
+        lengths = list(self.get_checklengths().items())
+        result = Table()
+        lengths.sort(key=lambda el: Table.str_decrypt(el[0]))
+        result[0,0] = "Name"
+        result[0,1] = "Length [mm]"
+
+        for i, (name, length) in enumerate(lengths):
+            result[i+1, 0] = name
+            result[i+1, 1] = f"{length*1000:.0f}"
+        
+        result.name = "checksheet"
+
+        return result
 
     def get_force_table(self) -> Table:
         def get_line_force(line: Line) -> list[str]:
@@ -757,8 +786,34 @@ class LineSet:
 
 
     def get_table_2(self) -> Table:
-        table = self._get_lines_table(lambda line: [line.name, f"{line.line_type.name} ({line.color})", f"{line.get_stretched_length()*1000:.0f}"])
-        table.name = "lines_2"
+        table = Table(name="lines_table")
+
+        table[0, 0] = "Name"
+        table[0, 1] = "Linetype"
+        table[0, 2] = "Color"
+        table[0, 3] = "Raw length"
+        table[0, 4] = "Local Checking Length"
+        table[0, 5] = "Seam Correction"
+        table[0, 6] = "Loop Correction"
+        table[0, 7] = "Knot Correction"
+        table[0, 8] = "Manual Correction"
+        table[0, 9] = "Cutting Length"
+
+        lines = self.sort_lines(by_names=True)
+        for i, line in enumerate(lines):
+            line_length = self.get_line_length(line)
+
+            table[i+2, 0] = line.name
+            table[i+2, 1] = f"{line.line_type}"
+            table[i+2, 2] = line.color
+            table[i+2, 3] = round(line_length.get_checklength() * 1000)
+            table[i+2, 4] = round(line_length.get_length() * 1000)
+            table[i+2, 5] = round(line_length.seam_correction * 1000)
+            table[i+2, 6] = round(line_length.loop_correction * 1000)
+            table[i+2, 7] = round(line_length.knot_correction * 1000)
+            table[i+2, 8] = round(line_length.manual_correction * 1000)
+            table[i+2, 9] = round(line_length.get_cutting_length() * 1000)
+        
         return table
 
     def get_table_sorted_lengths(self) -> Table:
