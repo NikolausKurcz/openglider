@@ -103,7 +103,7 @@ class MiniRib:
         profile_2d = profile_3d.flatten()
         contour = profile_2d.curve
 
-        cutback = self.convert_to_percentage(self.trailing_edge_cut, cell).si
+        cutback = self.convert_to_chordlength(self.trailing_edge_cut, cell).si
 
         start_bottom = profile_2d.get_ik(self.front_cut*profile_2d.curve.nodes[0][0])
         end_bottom = profile_2d.get_ik(self.back_cut*profile_2d.curve.nodes[0][0]-cutback)
