@@ -54,3 +54,27 @@ A6843(280, 2.1, 3.2)
 A6843(370, 2.4, 4.6)
 
 LineType("edelrid.7850-240", 1.58, 2.8, 2120, 1, True)
+
+def A7343(strength: int, diameter: float, weight: float) -> None:
+    LineType(
+        f"edelrid.A-7343-{strength:03d}",
+        diameter,
+        [[10*strength, 5.]],
+        10*strength,
+        weight,
+        sheated=True,
+        colors={
+            "fluored": Color.parse_hex("f70000"),
+            "sky": Color.parse_hex("b2d4dd"),
+            "citrus": Color.parse_hex("f5ff00"),
+        }
+    )
+
+A7343(75, 1.0, 0.70)
+A7343(90, 1.2, 1.10)
+A7343(140, 1.3, 1.40)
+A7343(190, 1.5, 1.80)
+A7343(230, 1.7, 2.40)
+A7343(280, 1.8, 2.60)
+A7343(340, 2.1, 3.70)
+A7343(420, 2.3, 4.10)
