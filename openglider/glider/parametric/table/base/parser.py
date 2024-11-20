@@ -75,9 +75,9 @@ class Parser(BaseModel):
         return self._units
     
     def get_parser(self) -> Forward:
-        if self._parser is None:            
+        if self._parser is None:
             regex_number = Regex(f"({Quantity.re_number})")
-            units = regex_number + Regex(f"\s*({Quantity.re_unit})")
+            units = regex_number + Regex(rf"\s*({Quantity.re_unit})")
             #units = Regex(Quantity.re_combined)
 
             identifier = Word(alphas, alphanums + "_$")

@@ -67,6 +67,7 @@ def A7343(strength: int, diameter: float, weight: float) -> None:
             "fluored": Color.parse_hex("f70000"),
             "sky": Color.parse_hex("b2d4dd"),
             "citrus": Color.parse_hex("f5ff00"),
+            "turquoise": Color.parse_hex("44bbca")
         }
     )
 
