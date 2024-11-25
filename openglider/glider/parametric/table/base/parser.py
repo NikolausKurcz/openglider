@@ -30,7 +30,7 @@ def default_resolver(key: str) -> float:
 
 class Parser(BaseModel):
     units: list[type[Quantity]] = Field(default_factory=default_units.copy)
-    variable_resolver: Callable[[str], float] = default_resolver
+    variable_resolver: Callable[[str], float | Quantity] = default_resolver
 
     _parser: Forward | None =  pydantic.PrivateAttr(default=None)
     _units: dict[str, type[Quantity]] | None = pydantic.PrivateAttr(default=None)
@@ -75,9 +75,9 @@ class Parser(BaseModel):
         return self._units
     
     def get_parser(self) -> Forward:
-        if self._parser is None:            
+        if self._parser is None:
             regex_number = Regex(f"({Quantity.re_number})")
-            units = regex_number + Regex(f"\s*({Quantity.re_unit})")
+            units = regex_number + Regex(rf"\s*({Quantity.re_unit})")
             #units = Regex(Quantity.re_combined)
 
             identifier = Word(alphas, alphanums + "_$")
@@ -141,7 +141,9 @@ class Parser(BaseModel):
             else:
                 break
     
-    def parse(self, expression: str | float) -> Quantity | float:
+    def parse(self, expression: str | float) -> Quantity | float | None:
+        if expression is None:
+            return None
         if isinstance(expression, (float, int)):
             return float(expression)
         

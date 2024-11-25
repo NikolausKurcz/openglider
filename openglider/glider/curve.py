@@ -1,15 +1,37 @@
-from typing import Any
+from typing import Any, ClassVar
 
 import euklid
 import enum
 
 from openglider.glider.shape import Shape
 from openglider.utils.cache import cached_property
+from openglider.utils.dataclass import BaseModel
+from openglider.vector.unit import Angle, Length, Percentage, Quantity
 
-class FreeCurve:
+class CurveBase(BaseModel):
+    unit: str | None = None
+    interpolation: euklid.vector.Interpolation
+    shape: Shape
+
+    def to_unit(self, value: float) -> Quantity | float:
+        if self.unit is None:
+            return value
+        
+        if self.unit in Angle.unit_variants or self.unit == Angle.unit:
+            return Angle(value, unit=self.unit)
+        if self.unit in Length.unit_variants or self.unit == Length.unit:
+            return Length(value, unit=self.unit)
+        if self.unit in Percentage.unit_variants:
+            return Percentage(value, self.unit)
+
+        raise ValueError()
+
+class FreeCurve(CurveBase):
     def __init__(self, points: list[euklid.vector.Vector2D], shape: Shape):
-        self.shape = shape
-        self.interpolation = euklid.vector.Interpolation(points)
+        super().__init__(
+            shape = shape,
+            interpolation = euklid.vector.Interpolation(points)
+        )
     
     @property
     def controlpoints(self) -> list[euklid.vector.Vector2D]:
@@ -67,11 +89,12 @@ class FreeCurve:
     def points_2d(self) -> list[euklid.vector.Vector2D]:
         return self.to_2d(self.interpolation.nodes)
     
-    def get(self, rib_no: int) -> float:
+    def get(self, rib_no: int) -> float | Quantity:
         if rib_no == 0 and self.shape.has_center_cell:
             rib_no = 1
 
-        return self.interpolation.get_value(rib_no)
+        value = self.interpolation.get_value(rib_no)
+        return self.to_unit(value)
 
     def draw(self) -> euklid.vector.PolyLine2D:
         x_values = [p[0] for p in self.controlpoints]
@@ -92,11 +115,12 @@ class FreeCurve:
         return euklid.vector.PolyLine2D(self.to_2d([euklid.vector.Vector2D([x, self.interpolation.get_value(x)]) for x in x_values_lst]))
 
 
-class Curve:
-    upper = False
+class Curve(CurveBase):
     def __init__(self, points: list[euklid.vector.Vector2D], shape: Shape):
-        self.interpolation = euklid.vector.Interpolation(points)
-        self.shape = shape
+        super().__init__(
+            interpolation = euklid.vector.Interpolation(points),
+            shape=shape
+        )
 
     @property
     def controlpoints(self) -> list[euklid.vector.Vector2D]:
@@ -154,16 +178,13 @@ class Curve:
             self.shape.get_point(*p) for p in self.interpolation.nodes
         ])
     
-    def get(self, rib_no: int) -> float:
+    def get(self, rib_no: int) -> float | Quantity:
         if rib_no == 0 and self.shape.has_center_cell:
             rib_no = 1
 
         y = self.interpolation.get_value(rib_no)
 
-        if self.upper:
-            y = -y
-
-        return y
+        return self.to_unit(y)
         
     def draw(self) -> euklid.vector.PolyLine2D:
         x_values = [p[0] for p in self.controlpoints]
@@ -181,7 +202,19 @@ class Curve:
         if end % 1:
             x_values_lst.append(end)
 
-        points = [self.shape.get_point(x, self.get(x)) for x in x_values_lst]
+        percentage_lst: list[Percentage | float] = []
+        for x in x_values_lst:
+            y = self.get(x)
+            if not isinstance(y, (Percentage, float)):
+                raise ValueError()
+
+            percentage_lst.append(y)
+
+        for p in percentage_lst:
+            if not isinstance(p, (Percentage, float)):
+                raise ValueError()
+
+        points = [self.shape.get_point(x, y) for x, y in zip(x_values_lst, percentage_lst)]
 
         if start == 1 and self.shape.has_center_cell:
             points.insert(0, points[0] * euklid.vector.Vector2D([-1,1]))
@@ -191,8 +224,7 @@ class Curve:
 
 
 class ShapeCurve(Curve):
-    
-    def get(self, rib_no: int) -> float:
+    def get(self, rib_no: int) -> float | Quantity:
         if rib_no == 0 and self.shape.has_center_cell:
             rib_no = 1
 
@@ -203,17 +235,11 @@ class ShapeCurve(Curve):
         if len(results) != 1:
             raise Exception(f"wrong number of cut results: {len(results)}")
 
-        return results[0][1]
+        return self.to_unit(results[0][1])
 
 
 class ShapeBSplineCurve(ShapeCurve):
-    curve_cls = euklid.spline.BSplineCurve
-
-    def __init__(self, points: list[euklid.vector.Vector2D], shape: Shape, curve_cls: Any=None):
-        if curve_cls is not None:
-            self.curve_cls = curve_cls
-        
-        super().__init__(points, shape)
+    curve_cls: ClassVar[type] = euklid.spline.BSplineCurve
     
     @cached_property('shape', 'interpolation')
     def points_2d(self) -> euklid.vector.PolyLine2D:

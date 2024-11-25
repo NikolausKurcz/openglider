@@ -18,7 +18,6 @@ from openglider.glider.cell.panel import Panel, PanelCut, PANELCUT_TYPES
 from openglider.glider.glider import Glider
 from openglider.glider.parametric.arc import ArcCurve
 from openglider.glider.parametric.export_ods import export_ods_2d
-from openglider.glider.parametric.fitglider import fit_glider_3d
 from openglider.glider.parametric.import_ods import import_ods_2d
 from openglider.glider.parametric.shape import ParametricShape
 from openglider.glider.parametric.table import GliderTables
@@ -29,7 +28,7 @@ from openglider.utils.dataclass import dataclass, Field
 from openglider.utils.distribution import Distribution
 from openglider.utils.table import Table
 from openglider.utils.types import CurveType, SymmetricCurveType
-from openglider.vector.unit import Percentage
+from openglider.vector.unit import Percentage, Quantity
 
 if TYPE_CHECKING:
     from openglider.glider.curve import GliderCurveType
@@ -54,7 +53,6 @@ class ParametricGlider:
     speed: float
     glide: float
     tables: GliderTables = Field(default_factory=lambda: GliderTables())
-    zrot: SymmetricCurveType = Field(default_factory=lambda: euklid.spline.SymmetricBSplineCurve([[0,0],[1,0]]))
 
     num_interpolate: int=30
     num_profile: int | None=None
@@ -227,10 +225,6 @@ class ParametricGlider:
             for strap_no, strap in enumerate(cell.diagonals):
                 strap.name = "c{}{}{}".format(cell_no+1, "s", strap_no)
 
-    @classmethod
-    def fit_glider_3d(cls, glider: Glider, numpoints: int=3) -> ParametricGlider:
-        return fit_glider_3d(cls, glider, numpoints)
-
     def get_aoa(self, interpolation_num: int | None=None) -> list[float]:
         aoa_interpolation = euklid.vector.Interpolation(self.aoa.get_sequence(interpolation_num or self.num_interpolate).nodes)
 
@@ -283,8 +277,8 @@ class ParametricGlider:
         parsers = []
         curves=self.get_curves()
 
-        def resolver_factory(rib_no: int) -> Callable[[str], float]:
-            def resolve(name: str) -> float:
+        def resolver_factory(rib_no: int) -> Callable[[str], float | Quantity]:
+            def resolve(name: str) -> float | Quantity:
                 if name not in curves:
                     raise ValueError(
                         f"could not resolve name '{name}' "+
@@ -391,7 +385,6 @@ class ParametricGlider:
         shape_ribs = self.shape.ribs
 
         aoa_values = self.get_aoa()
-        zrot_int = euklid.vector.Interpolation(self.zrot.get_sequence(num).nodes)
 
         arc_pos = self.arc.get_arc_positions(x_values).tolist()
         rib_angles = self.arc.get_rib_angles(x_values)
@@ -426,16 +419,18 @@ class ParametricGlider:
             }
             data.update(self.tables.rib_modifiers.get_rib_args(rib_no, resolvers=resolvers))
 
+            rotation = self.tables.rib_modifiers.get_rotation(rib_no, resolvers=resolvers)
+
             rib = Rib(
                 profile_2d=profile,
                 pos=startpoint,
                 chord=chord,
                 arcang=rib_angles[rib_no],
-                xrot=self.tables.rib_modifiers.get_xrot(rib_no),
+                xrot=rotation.x,
                 offset=self.tables.rib_modifiers.get_offset(rib_no, resolvers=resolvers),
                 glide=self.glide,
                 aoa_absolute=aoa_values[rib_no],
-                zrot=zrot_int.get_value(abs(x_value)),
+                zrot=rotation.z,
                 holes=this_rib_holes,
                 rigidfoils=this_rigid_foils,
                 name=f"rib{rib_no}",
@@ -573,5 +568,4 @@ class ParametricGlider:
         rescale(self.ballooning_merge_curve)
         rescale(self.profile_merge_curve)
         rescale(self.aoa)
-        rescale(self.zrot)
         self.arc.rescale(self.shape.rib_x_values)

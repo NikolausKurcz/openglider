@@ -31,6 +31,10 @@ class Quantity(pydantic.BaseModel):
     def __init__(self, value: float | str, unit: str | None=None, display_unit: str | None=None):
         data = self._get_init_args(value, unit, display_unit)
         super().__init__(**data)
+
+    @classmethod
+    def zero(cls) -> Self:
+        return cls(0.)
     
     @classmethod
     def _get_init_args(cls, value: float | str, unit: str | None=None, display_unit: str | None=None) -> dict[str, Any]:
@@ -67,6 +71,14 @@ class Quantity(pydantic.BaseModel):
                 raise ValueError(f"cannot use unit {display_unit_to_set} {cls.unit_variants} {cls}")
         
         return dct
+    
+    @classmethod
+    def get_all_unit_variants(cls) -> tuple[str]:
+        variants = tuple(cls.unit_variants.keys())
+        if cls.unit:
+            variants += (cls.unit, )
+        
+        return variants
 
     def get(self, unit: str | None=None) -> float:
         if unit is None or unit == self.unit:

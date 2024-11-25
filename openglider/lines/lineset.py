@@ -628,8 +628,8 @@ class LineSet:
     
     node_group_rex = re.compile(r"[^A-Za-z]*([A-Za-z]*)[^A-Za-z]*")
 
-    def rename_lines(self) -> LineSet:            
-        def get_floor(line: Line) -> tuple[int, list[str]]:
+    def rename_lines(self) -> LineSet:
+        def get_floor(line: Line) -> tuple[int, str]:
             upper_lines = self.get_upper_connected_lines(line.upper_node)
             
             if len(upper_lines) < 1:
@@ -638,7 +638,7 @@ class LineSet:
                     node_group = self.node_group_rex.match(line.upper_node.name)
                     if node_group:
                         prefix_name = node_group.group(1)
-                return 1, [prefix_name]
+                return 0, prefix_name
             
             upper_lines_floors = [get_floor(l) for l in upper_lines]
             floor = max([x[0] for x in upper_lines_floors]) + 1
@@ -650,20 +650,31 @@ class LineSet:
             prefix_lst = list(prefixes)
             prefix_lst.sort()
         
-            return floor, prefix_lst
+            return floor, "".join(prefix_lst)
+        
+        if not self.lines:
+            return self
 
-        lines_by_prefix: dict[str, list[Line]] = {}
+        lines_by_floor: dict[int, dict[str, list[Line]]] = {}
+        
         for line in self.lines:
             floor, prefixes = get_floor(line)
-            prefix = f"{floor}_{''.join(prefixes)}"
 
-            lines_by_prefix.setdefault(prefix, [])
-            lines_by_prefix[prefix].append(line)
+            lines_by_floor.setdefault(floor, {})
+            lines_by_floor[floor].setdefault(prefixes, [])
 
-        for prefix, lines in lines_by_prefix.items():
-            lines_sorted = self.sort_lines(lines)
-            for i, line in enumerate(lines_sorted):
-                line.name = f"{prefix}{i+1:02d}"
+            lines_by_floor[floor][prefixes].append(line)
+
+        for prefix, lines in lines_by_floor.get(0, {}).items():
+            for line in lines:
+                line.name = f"1_{line.upper_node.name}"
+
+        for floor in range(max(lines_by_floor)):
+            for prefix, lines in lines_by_floor.get(floor, {}).items():
+                lines_sorted = self.sort_lines(lines, by_names=True)
+
+                for i, line in enumerate(lines_sorted):
+                    line.name = f"{floor+1}_{prefix}{i+1}"
 
         return self
     
