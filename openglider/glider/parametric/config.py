@@ -9,7 +9,7 @@ from openglider.lines.node import Node
 from openglider.utils.dataclass import BaseModel
 from openglider.utils.table import Table
 from openglider.vector import unit
-from openglider.vector.unit import Angle, Length
+from openglider.vector.unit import Angle, Length, Percentage
 from openglider.version import __version__
 
 adapters: dict[type, Any] = {}
@@ -121,6 +121,7 @@ class ParametricGliderConfig(ConfigTable):
     last_profile_height: float = 0
     
     use_sag: bool = True
+    baseline_pct: Percentage = Percentage(0.)
 
     version: Version = Version(__version__)
 

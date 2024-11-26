@@ -7,6 +7,7 @@ from collections.abc import Iterator
 
 import euklid
 import numpy as np
+from openglider.glider.shape import Shape
 from openglider.lines.line import Line
 from openglider.lines.node import Node
 import openglider.plots.marks as marks
@@ -15,7 +16,7 @@ from openglider.glider.cell.panel import Panel, PanelCut
 from openglider.utils.dataclass import dataclass
 from openglider.vector.drawing import Layout, PlotPart
 from openglider.vector.text import Text
-from openglider.vector.unit import Length, Percentage
+from openglider.vector.unit import Percentage
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +35,14 @@ class ShapePlotConfig:
     straps: bool = False
     diagonals: bool = False
 
+    apply_zrot: bool = False
     scale_area: float | None = None
     scale_span: float | None = None
 
     def view_layers(self) -> dict[str, bool]:
         layers = {}
         for attribute in self.__annotations__:
-            if not attribute.startswith("scale"):
+            if not attribute.startswith("scale") and attribute != "apply_zrot":
                 layers[attribute] = getattr(self, attribute)
             
         return layers
@@ -67,8 +69,10 @@ class ShapePlotConfig:
 
 class ShapePlot:
     project: GliderProject
-    config: ShapePlotConfig | None
     attachment_point_mark = marks.Cross(name="attachment_point", rotation=np.pi/4)
+
+    config: ShapePlotConfig | None = None
+    shapes: tuple[Shape, Shape] | None = None
 
     def __init__(self, project: GliderProject, drawing: Layout | None=None):
         super().__init__()
@@ -80,27 +84,30 @@ class ShapePlot:
         self.reference_area = self.glider_2d.shape.area
         self.reference_span = self.glider_2d.shape.span
 
-        self.shape_r = self.glider_2d.shape.get_half_shape()
+    def _get_shapes(self, config: ShapePlotConfig, force: bool=False) -> tuple[Shape, Shape]:
+        if force or self.config is None or self.shapes is None or config.apply_zrot != self.config.apply_zrot:
+            if config.apply_zrot:
+                zrot = [rib.zrot for rib in self.glider_3d.ribs]
+            else:
+                zrot = None
+            shape_r = self.glider_2d.shape.get_half_shape(zrot=zrot)
+            shape_l = shape_r.copy().scale(x=-1)
+            self.shapes = (shape_r, shape_l)
+        
+        return self.shapes
 
-        self.shape_l = self.shape_r.copy().scale(x=-1)
-        self.shapes = [self.shape_r, self.shape_l]
-
-        self.config = None
     
     def redraw(self, config: ShapePlotConfig, force: bool=False) -> Layout:
-        if force:
-            self.shape_r = self.glider_2d.shape.get_half_shape()
-
-            self.shape_l = self.shape_r.copy().scale(x=-1)
-            self.shapes = [self.shape_r, self.shape_l]
+        shapes = self._get_shapes(config, force)
+        
         if config != self.config or force:
             self.drawing = Layout()
 
             for layer_name, show_layer in config.view_layers().items():
                 if show_layer:
                     f = getattr(self, f"draw_{layer_name}")
-                    f(left=True)
-                    f(left=False)
+                    f(shapes, left=True)
+                    f(shapes, left=False)
         
             if config.scale_area:
                 self.drawing.scale(math.sqrt(config.scale_area/self.reference_area))
@@ -133,14 +140,14 @@ class ShapePlot:
 
         return range(start, end)
     
-    def draw_design_lower(self, left: bool=False) -> ShapePlot:
-        return self.draw_design(True, left)
+    def draw_design_lower(self, shapes: tuple[Shape, Shape], left: bool=False) -> ShapePlot:
+        return self.draw_design(shapes, True, left)
     
-    def draw_design_upper(self, left: bool=False) -> ShapePlot:
-        return self.draw_design(False, left)
+    def draw_design_upper(self, shapes: tuple[Shape, Shape], left: bool=False) -> ShapePlot:
+        return self.draw_design(shapes, False, left)
 
-    def draw_design(self, lower: bool=True, left: bool=False) -> ShapePlot:
-        shape = self.shapes[left]
+    def draw_design(self, shapes: tuple[Shape, Shape], lower: bool=True, left: bool=False) -> ShapePlot:
+        shape = shapes[left]
 
         panels = self.glider_2d.get_panels()
 
@@ -184,11 +191,11 @@ class ShapePlot:
 
         return self
 
-    def draw_baseline(self, pct: float | None=None, left: bool=False) -> None:
-        shape = self.shapes[left]
+    def draw_baseline(self, shapes: tuple[Shape, Shape], pct: float | None=None, left: bool=False) -> None:
+        shape = shapes[left]
 
         if pct is None:
-            pct = self.glider_2d.shape.baseline_pos
+            pct = self.glider_2d.shape.baseline_pos.si
 
         part = PlotPart()
         
@@ -196,19 +203,19 @@ class ShapePlot:
         part.layers["marks"].append(line)
         self.drawing.parts.append(part)
 
-    def draw_grid(self, num: int=11, left: bool=False) -> ShapePlot:
+    def draw_grid(self, shapes: tuple[Shape, Shape], num: int=11, left: bool=False) -> ShapePlot:
         import numpy as np
 
         for x in np.linspace(0, 1, num):
             self.draw_baseline(x, left=left)
 
-        self.draw_cells(left=left)
+        self.draw_cells(shapes, left=left)
         return self
 
-    def _get_attachment_point_positions(self, left: bool=False) -> dict[str, euklid.vector.Vector2D]:
+    def _get_attachment_point_positions(self, shapes: tuple[Shape, Shape], left: bool=False) -> dict[str, euklid.vector.Vector2D]:
 
         points = {}
-        shape = self.shapes[left]
+        shape = shapes[left]
 
         for rib_no, rib in enumerate(self.glider_3d.ribs):
             for attachment_point in rib.attachment_points:
@@ -221,9 +228,9 @@ class ShapePlot:
         return points
 
 
-    def draw_attachment_points(self, add_text: bool=True, left: bool=False) -> None:
+    def draw_attachment_points(self, shapes: tuple[Shape, Shape], add_text: bool=True, left: bool=False) -> None:
         part = PlotPart()
-        points = self._get_attachment_point_positions(left=left)
+        points = self._get_attachment_point_positions(shapes, left=left)
 
         for name, p1 in points.items():
             p2 = p1 + euklid.vector.Vector2D([0.1, 0])
@@ -245,8 +252,8 @@ class ShapePlot:
 
         self.drawing.parts.append(part)
 
-    def draw_cells(self, left: bool=False) -> None:
-        shape = self.shapes[left]
+    def draw_cells(self, shapes: tuple[Shape, Shape], left: bool=False) -> None:
+        shape = shapes[left]
 
         cells = []
 
@@ -262,8 +269,8 @@ class ShapePlot:
             material_code="cell_numbers")
         )
 
-    def draw_cell_names(self, left: bool=False) -> None:
-        shape = self.shapes[left]
+    def draw_cell_names(self, shapes: tuple[Shape, Shape], left: bool=False) -> None:
+        shape = shapes[left]
         names = []
         
         for cell_no in self._get_cell_range(left):
@@ -280,8 +287,8 @@ class ShapePlot:
             material_code="cell_numbers")
         )
 
-    def draw_rib_names(self, left: bool=False) -> ShapePlot:
-        shape = self.shapes[left]
+    def draw_rib_names(self, shapes: tuple[Shape, Shape], left: bool=False) -> ShapePlot:
+        shape = shapes[left]
         names = []
 
         for rib_no in self._get_rib_range(left):
@@ -305,8 +312,8 @@ class ShapePlot:
         )
         return self
 
-    def draw_straps(self, left: bool=False) -> ShapePlot:
-        shape = self.shapes[left]
+    def draw_straps(self, shapes: tuple[Shape, Shape], left: bool=False) -> ShapePlot:
+        shape = shapes[left]
 
         for cell_no in self._get_cell_range(left):
             cell = self.glider_3d.cells[cell_no]
@@ -321,8 +328,8 @@ class ShapePlot:
 
         return self
 
-    def draw_diagonals(self, left: bool=False) -> ShapePlot:
-        shape = self.shapes[left]
+    def draw_diagonals(self, shapes: tuple[Shape, Shape], left: bool=False) -> ShapePlot:
+        shape = shapes[left]
 
         for cell_no in self._get_cell_range(left):
             cell = self.glider_3d.cells[cell_no]
@@ -337,14 +344,14 @@ class ShapePlot:
 
         return self
 
-    def draw_lines(self, left: bool=True, add_text: bool=False) -> ShapePlot:
+    def draw_lines(self, shapes: tuple[Shape, Shape], left: bool=True, add_text: bool=False) -> ShapePlot:
         #self.draw_design(lower=True)
         #self.draw_design(lower=True, left=True)
         #self.draw_attachment_points(True)
         #self.draw_attachment_points(True, left=True)
         lower = self.glider_3d.lineset.lower_attachment_points
 
-        attachment_point_positions = self._get_attachment_point_positions(left=False)
+        attachment_point_positions = self._get_attachment_point_positions(shapes, left=False)
         all_nodes = {}
         for node in self.glider_3d.lineset.nodes:
             if node.node_type == node.NODE_TYPE.UPPER:

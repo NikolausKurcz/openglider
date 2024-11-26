@@ -1,6 +1,7 @@
 import enum
 import logging
 from collections.abc import Callable
+import typing
 
 import pyqtgraph
 from openglider.glider.project import GliderProject
@@ -45,14 +46,16 @@ class ShapeConfigWidget(QtWidgets.QWidget):
             
             return toggle_prop
 
-        for prop in self.config.view_layers():
+        for prop, prop_type in self.config.__annotations__.items():
+            #print(f"prop: {prop_type}, {type(prop_type)}")
 
-            checkbox = QtWidgets.QCheckBox(self)
-            checkbox.setChecked(getattr(self.config, prop))
-            checkbox.setText(f"{prop}")
-            checkbox.clicked.connect(get_clickhandler(prop))
-            self.layout().addWidget(checkbox)
-            self.checkboxes[prop] = checkbox
+            if prop_type == "bool":
+                checkbox = QtWidgets.QCheckBox(self)
+                checkbox.setChecked(getattr(self.config, prop))
+                checkbox.setText(f"{prop}")
+                checkbox.clicked.connect(get_clickhandler(prop))
+                self.layout().addWidget(checkbox)
+                self.checkboxes[prop] = checkbox
         
         self.selection = EnumSelection(ScaleOptions)
         self.selection.changed.connect(self.update_scale)

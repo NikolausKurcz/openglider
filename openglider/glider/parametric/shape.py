@@ -11,6 +11,7 @@ from openglider.glider.shape import Shape
 from openglider.utils import linspace
 from openglider.utils.dataclass import dataclass
 from openglider.utils.types import CurveType, SymmetricCurveType
+from openglider.vector.unit import Angle, Percentage
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,6 @@ class ParametricShape:
     num_shape_interpolation = 50
     num_distribution_interpolation = 50
     num_depth_integral = 50
-    baseline_pos = 0.25
 
     class Config:
         arbitrary_types_allowed = True
@@ -54,15 +54,11 @@ class ParametricShape:
 
     @property
     def baseline(self) -> euklid.vector.PolyLine2D:
-        return self.get_baseline(self.baseline_pos)
+        return self.get_baseline(self.config.baseline_pct)
 
-    def get_baseline(self, pct: float) -> euklid.vector.PolyLine2D:
+    def get_baseline(self, pct: Percentage) -> euklid.vector.PolyLine2D:
         shape = self.get_half_shape()
-        line = []
-        for i in range(shape.rib_no):
-            line.append(shape.get_point(i, pct))
-
-        return euklid.vector.PolyLine2D(line)
+        return shape.get_baseline(pct)
 
     @property
     def has_center_cell(self) -> bool:
@@ -135,7 +131,7 @@ class ParametricShape:
 
         return cells
 
-    def get_half_shape(self) -> Shape:
+    def get_half_shape(self, zrot: list[Angle | None] | None = None) -> Shape:
         """
         Return shape of the glider:
         [ribs, front, back]
@@ -168,8 +164,34 @@ class ParametricShape:
             p2 = back[0][:]
             p2[0] = - p2[0]
             back.insert(0, p2)
-            
-        return Shape(euklid.vector.PolyLine2D(front), euklid.vector.PolyLine2D(back))
+
+        base_shape = Shape(euklid.vector.PolyLine2D(front), euklid.vector.PolyLine2D(back))
+
+        if zrot is None:
+            return base_shape
+        
+        baseline = base_shape.get_baseline(self.config.baseline_pct).nodes
+        front_new = []
+        back_new = []
+
+        for rib_no, angle in enumerate(zrot):
+            if angle is None:
+                front_new.append(front[rib_no])
+                back_new.append(back[rib_no])
+            else:
+                rotation = euklid.vector.Rotation2D(angle.si)
+                front_new.append(
+                    baseline[rib_no] + rotation.apply(base_shape.front.nodes[rib_no]-baseline[rib_no])
+                )
+                back_new.append(
+                    baseline[rib_no] + rotation.apply(base_shape.back.nodes[rib_no]-baseline[rib_no])
+                )
+        
+        return Shape(
+            euklid.vector.PolyLine2D(front_new),
+            euklid.vector.PolyLine2D(back_new)
+        )
+
 
     def get_shape(self) -> Shape:
         """
