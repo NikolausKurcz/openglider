@@ -1,19 +1,21 @@
 from __future__ import annotations
 
+import dataclasses
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 from collections.abc import Callable
 
 import euklid
 from openglider.glider.parametric.shape import ParametricShape
 from openglider.glider.project import GliderProject
-from openglider.gui.qt import QtWidgets
+from openglider.gui.qt import QtWidgets, QtCore
 from openglider.gui.views_2d import Canvas, DraggableLine, Line2D
 from openglider.gui.views_2d.canvas import LayoutGraphics
 from openglider.gui.widgets import NumberInput
 from openglider.gui.wizzards.base import GliderSelectionWizard
 from openglider.plots.sketches.shapeplot import ShapePlot, ShapePlotConfig
 from openglider.utils.colors import Color
+from openglider.utils.dataclass import dataclass
 
 if TYPE_CHECKING:
     from openglider.gui.app.main_window import MainWindow
@@ -201,10 +203,30 @@ class RibDistInput(Canvas):
         pass
 
 
-class ShapeSettings(QtWidgets.QWidget):
+@dataclass
+class ShapeSettings:
+    area: float
+    aspect_ratio: float
+    sweep: float
+    cell_count: int
+    scale: Literal["Area"] | Literal["Span"] | None
+    zrot: bool = False
+
+class ShapeSettingsWidget(QtWidgets.QWidget):
+    changed = QtCore.Signal()
     def __init__(self, shape: ParametricShape):
         super().__init__()
         layout = QtWidgets.QVBoxLayout()
+
+        self.settings = ShapeSettings(
+            area=shape.area,
+            aspect_ratio=shape.aspect_ratio,
+            sweep=shape.get_sweep(),
+            cell_count=shape.cell_num,
+            scale=None,
+            zrot=False
+        )
+
         self.setLayout(layout)
 
         self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Fixed, QtWidgets.QSizePolicy.Policy.Fixed)
@@ -220,11 +242,38 @@ class ShapeSettings(QtWidgets.QWidget):
         self.input_scale.insertItem(1, "Scale Area")
         self.input_scale.insertItem(2, "Scale Span")
 
+        self.zrot = False
+        self.input_zrot = QtWidgets.QCheckBox()
+        self.input_zrot.setChecked(False)
+        layout.addWidget(self.input_zrot)
+
+        self.input_zrot.clicked.connect(self._update)
+        self.input_area.on_changed.append(self._update)
+        self.input_aspect_ratio.on_changed.append(self._update)
+        self.input_sweep.on_changed.append(self._update)
+        self.input_cell_count.on_changed.append(self._update)
+
         layout.addWidget(self.input_area)
         layout.addWidget(self.input_aspect_ratio)
         layout.addWidget(self.input_sweep)
         layout.addWidget(self.input_cell_count)
         layout.addWidget(self.input_scale)
+
+    def _update(self, value: Any=None) -> None:
+        self.settings.area = self.input_area.value
+        self.settings.aspect_ratio = self.input_aspect_ratio.value
+        self.settings.sweep = self.input_sweep.value
+        self.settings.cell_count = int(self.input_cell_count.value)
+        if self.normalize_area:
+            self.settings.scale = "Area"
+        elif self.normalize_span:
+            self.settings.scale = "Span"
+        else:
+            self.settings.scale = None
+
+        self.settings.zrot = self.input_zrot.isChecked()
+
+        self.changed.emit()
     
     @property
     def normalize_area(self) -> bool:
@@ -233,6 +282,11 @@ class ShapeSettings(QtWidgets.QWidget):
     @property
     def normalize_span(self) -> bool:
         return self.input_scale.currentIndex() == 2
+    
+    def update_zrot(self, value: bool=False) -> None:
+        self.zrot = not self.zrot
+        self.input_zrot.setChecked(self.zrot)
+        self.changed.emit()
     
     def update_shape(self, shape: ParametricShape) -> None:
         self.input_area.set_value(shape.area, propagate=True)
@@ -253,19 +307,17 @@ class ShapeWizard(GliderSelectionWizard):
 
         self.main_widget.setSizes([300, 700])
 
-        self.shape_settings = ShapeSettings(self.project.glider.shape)
-        self.right_widget_layout.insertWidget(0, self.shape_settings)
+        self.shape_settings_widget = ShapeSettingsWidget(self.project.glider.shape)
+        self.settings = self.shape_settings_widget.settings
+
+        self.right_widget_layout.insertWidget(0, self.shape_settings_widget)
         #self.right_widget.layout().insertWidget(0, self.canvas_controls)
         self._selection_changed()
 
-        self.shape_input.on_change.append(self.shape_settings.update_shape)
+        self.shape_input.on_change.append(self.shape_settings_widget.update_shape)
         self.shape_input.on_change.append(self._selection_changed)
 
-        self.shape_settings.input_area.on_changed.append(self.apply_settings)
-        self.shape_settings.input_aspect_ratio.on_changed.append(self.apply_settings)
-        self.shape_settings.input_cell_count.on_changed.append(self.apply_settings)
-        self.shape_settings.input_sweep.on_changed.append(self.set_sweep)
-        self.shape_settings.input_scale.currentIndexChanged.connect(self._selection_changed)
+        self.shape_settings_widget.changed.connect(self.apply_settings)
     
     @property
     def shape(self) -> ParametricShape:
@@ -275,22 +327,29 @@ class ShapeWizard(GliderSelectionWizard):
         self.shape.set_sweep(value)
         self._update()
     
-    def apply_settings(self, value: float) -> None:
+    def apply_settings(self) -> None:
+        settings = self.shape_settings_widget.settings
+        self.shape_input.config.apply_zrot = settings.zrot
+
         shape: ParametricShape = self.shape
+        shape.set_area(settings.area)
+        shape.set_aspect_ratio(settings.aspect_ratio)
+        shape.cell_num = settings.cell_count
+
+        if self.settings.sweep != settings.sweep:
+            self.shape.set_sweep(settings.sweep)
         
-        shape.set_area(self.shape_settings.input_area.value)
-        shape.set_aspect_ratio(self.shape_settings.input_aspect_ratio.value)
-        shape.cell_num = int(self.shape_settings.input_cell_count.value)
+        self.settings = dataclasses.replace(settings)
         self._update()
 
     def _update(self) -> None:
         self.shape_input.front.set_controlpoints(self.shape.front_curve.controlpoints.nodes)
         self.shape_input.back.set_controlpoints(self.shape.back_curve.controlpoints.nodes)
-        self.shape_settings.update_shape(self.shape)
+        self.shape_settings_widget.update_shape(self.shape)
         self.shape_input.redraw()
 
     def selection_changed(self, selected: list[tuple[GliderProject, Color]]) -> None:
-        self.shape_input.draw_shapes(selected, normalize_area=self.shape_settings.normalize_area, normalize_span=self.shape_settings.normalize_span)
+        self.shape_input.draw_shapes(selected, normalize_area=self.shape_settings_widget.normalize_area, normalize_span=self.shape_settings_widget.normalize_span)
         self.distribution_input.draw_shapes(selected)
 
     def apply(self, update: bool=True) -> None:
