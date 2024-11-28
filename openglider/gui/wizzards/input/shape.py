@@ -242,10 +242,9 @@ class ShapeSettingsWidget(QtWidgets.QWidget):
         self.input_scale.insertItem(1, "Scale Area")
         self.input_scale.insertItem(2, "Scale Span")
 
-        self.zrot = False
         self.input_zrot = QtWidgets.QCheckBox()
+        self.input_zrot.setText("Apply ZRot")
         self.input_zrot.setChecked(False)
-        layout.addWidget(self.input_zrot)
 
         self.input_zrot.clicked.connect(self._update)
         self.input_area.on_changed.append(self._update)
@@ -258,6 +257,7 @@ class ShapeSettingsWidget(QtWidgets.QWidget):
         layout.addWidget(self.input_sweep)
         layout.addWidget(self.input_cell_count)
         layout.addWidget(self.input_scale)
+        layout.addWidget(self.input_zrot)
 
     def _update(self, value: Any=None) -> None:
         self.settings.area = self.input_area.value
