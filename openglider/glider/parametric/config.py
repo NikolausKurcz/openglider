@@ -76,6 +76,8 @@ class ConfigTable(BaseModel):
 
         #dct = self.model_dump()
         for i, (key, value) in enumerate(self):
+            if key == "version":
+                value = __version__
             if isinstance(value, euklid.vector.Vector3D):
                 value = list(value)
             elif isinstance(value, unit.Quantity):
