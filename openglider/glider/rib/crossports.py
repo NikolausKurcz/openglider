@@ -116,6 +116,41 @@ class RibHole(RibHoleBase):
         return [self._get_points(rib)[0]]
 
 
+def polygon(points: list[euklid.vector.Vector2D], corner_size: float, num_points) -> euklid.vector.PolyLine2D:
+    segments = []
+
+    def get_point(index: int) -> euklid.vector.Vector2D:
+        if index >= len(points):
+            index -= len(points)
+        
+        return points[index]
+
+    for i in range(len(points)):
+        p1 = get_point(i)
+        p2 = get_point(i+1)
+        p3 = get_point(i+2)
+
+        segments.append([
+            p1 + (p2-p1) * (1-corner_size/2),
+            p2,
+            p2 + (p3-p2) * (corner_size/2)
+        ])
+
+    sequence = []
+    for i, segment in enumerate(segments):
+        sequence += euklid.spline.BSplineCurve(segment).get_sequence(num_points).nodes
+
+        if corner_size < 1:
+            if i+1 >= len(segments):
+                segment2 = segments[0]
+            else:
+                segment2 = segments[i+1]
+            
+            sequence += [segment[-1], segment2[0]]
+
+    return euklid.vector.PolyLine2D(sequence).resample(num_points)
+
+
 class PolygonHole(RibHoleBase):
     points: list[euklid.vector.Vector2D]
     corner_size: float=1
@@ -130,45 +165,14 @@ class PolygonHole(RibHoleBase):
         return centers
 
     def _get_curves(self, rib: Rib, num: int=160) -> list[euklid.vector.PolyLine2D]:
-        segments = []
-
-        def get_point(index: int) -> euklid.vector.Vector2D:
-            if index >= len(self.points):
-                index -= len(self.points)
-            
-            return self.points[index]
-
-        for i in range(len(self.points)):
-            p1 = get_point(i)
-            p2 = get_point(i+1)
-            p3 = get_point(i+2)
-
-            segments.append([
-                p1 + (p2-p1) * (1-self.corner_size/2),
-                p2,
-                p2 + (p3-p2) * (self.corner_size/2)
-            ])
-
-        sequence = []
-        for i, segment in enumerate(segments):
-            sequence += euklid.spline.BSplineCurve(segment).get_sequence(num).nodes
-
-            if self.corner_size < 1:
-                if i+1 >= len(segments):
-                    segment2 = segments[0]
-                else:
-                    segment2 = segments[i+1]
-                
-                sequence += [segment[-1], segment2[0]]
-
-        return [euklid.vector.PolyLine2D(sequence).resample(num)]
+        return [polygon(self.points, self.corner_size, num)]
 
 
 class RibSquareHole(RibHoleBase):
     x: Percentage
     width: Percentage | Length
     height: Percentage
-    corner_size: float = 1        
+    corner_size: float = 1
 
     def get_centers(self, rib: Rib, scale: bool=False) -> list[euklid.vector.Vector2D]:
         width = rib.convert_to_percentage(self.width)

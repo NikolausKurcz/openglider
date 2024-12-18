@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 import euklid
 import logging
+import pyfoil
 
 from openglider.airfoil import Profile3D
 from openglider.utils.dataclass import dataclass, Field
 from openglider.mesh import Mesh, triangulate
 from openglider.vector.unit import Length, Percentage
+from openglider.glider.rib.crossports import polygon
 
 if TYPE_CHECKING:
     from openglider.glider.cell import Cell
@@ -26,9 +28,10 @@ class MiniRib:
     trailing_edge_cut: Length = Length("20mm")
     mrib_num: int = 0
     function: euklid.vector.Interpolation = Field(default_factory=lambda: euklid.vector.Interpolation([]))
-    hole_num: int=4
-    hole_border_side :float=0.2
-    hole_border_front_back: float=0.15
+    hole_num: int = 0
+    hole_border_side : Length | Percentage = Length("2cm")
+    hole_border_panel: Length | Percentage = Length("2cm")
+    hole_curve_factor: float = 0.5
 
 
     class Config:
@@ -63,11 +66,14 @@ class MiniRib:
         else:
             return 1.
         
-    def convert_to_percentage(self, value: Percentage | Length) -> Percentage:
+    def rib_chord(self, cell: Cell) -> float:
+        return cell.rib1.chord*(1-self.yvalue) + cell.rib2.chord*self.yvalue
+        
+    def convert_to_percentage(self, value: Percentage | Length, cell: Cell) -> Percentage:
         if isinstance(value, Percentage):
             return value
         
-        return Percentage(value.si/self.chord)
+        return Percentage(value.si/self.rib_chord(cell))
     
     def get_offset_outline(self, cell:Cell, margin: Percentage | Length) -> pyfoil.Airfoil:
         profile_3d = self.get_profile_3d(cell)
@@ -91,21 +97,11 @@ class MiniRib:
 
         return cell.rib_profiles_3d[self.mrib_num+1]  
     
-    
-    
-    def convert_to_percentage(self, value: Percentage | Length, cell:Cell) -> Percentage:
-        if isinstance(value, Percentage):
-            return value
-        chord = cell.rib1.chord*(1-self.yvalue) + cell.rib2.chord*self.yvalue
-        return Percentage(value.si/chord)
-    
     def convert_to_chordlength(self, value: Percentage | Length, cell:Cell) -> Length:
         if isinstance(value, Length):
             return value
         
-        chord = cell.rib1.chord*(1-self.yvalue) + cell.rib2.chord*self.yvalue
-        
-        return Length(value.si*chord)
+        return Length(value.si*self.rib_chord(cell))
 
     def _get_lengths(self, cell: Cell) -> tuple[float, float]:
         flattened_cell = cell.get_flattened_cell()
@@ -184,8 +180,6 @@ class MiniRib:
             vertices+= hole_vertices
             boundary.append([start_index + i for i in hole_indices])
 
-
-
         if not filled:
             segments = []
             for lst in boundary:
@@ -213,72 +207,70 @@ class MiniRib:
         return minirib_mesh
     
 
-    def get_holes(self, cell: Cell, points: int=40) -> tuple[list[euklid.vector.PolyLine2D], list[euklid.vector.Vector2D]]:
-        
+    def get_holes(self, cell: Cell, num_points: int=140) -> tuple[list[euklid.vector.PolyLine2D], list[euklid.vector.Vector2D]]:
+        if self.hole_num < 1:
+            return [], []
         nodes_top, nodes_bottom = self.get_nodes(cell)
 
-        len_top=nodes_top.get_length()
-        len_bot=nodes_bottom.get_length()
+        # add border on top / bottom
+        offset = self.convert_to_chordlength(self.hole_border_panel, cell)
+        top_curve = nodes_top.reverse().offset(offset)
+        bottom_curve = nodes_bottom.offset(-offset)
 
-        def get_point(x: float, y: float) -> euklid.vector.Vector2D:
-            p1 = nodes_top.get(nodes_top.walk(0, len_top*x))
-            p2 = nodes_bottom.get(nodes_bottom.walk(0, len_bot*(1-x)))
+        # check for intersection between offset lines
+        try:
+            cut = top_curve.cut(bottom_curve, len(top_curve.nodes)-1)
+            top_curve = top_curve.get(0, cut[0])
+            bottom_curve = bottom_curve.get(0, cut[1])
+        except RuntimeError:
+            pass
 
-            return p1 + (p2-p1)*y
+        # helper functions to get points on minirib
+        len_top=top_curve.get_length()
+        len_bot=bottom_curve.get_length()
+
+        def to_percentage(length: Length | Percentage):
+            if isinstance(length, Percentage):
+                return length
+
+            return Percentage(length.si/len_top)
         
+        def get_top(x: float) -> euklid.vector.Vector2D:
+            return top_curve.get(top_curve.walk(0, len_top*x))
+        
+        def get_bottom(x: float) -> euklid.vector.Vector2D:
+            return bottom_curve.get(bottom_curve.walk(0, len_bot*x))
+
         holes = []
         centers = []
+
+        end = self.back_cut if self.back_cut is not None else 1.
         
-        if self.hole_num == 4:
-            holes = [
-                euklid.spline.BSplineCurve([
-                    get_point(0.9,0.9),
-                    get_point(0.85,0.9),
-                    get_point(0.85,0.1),
-                    get_point(0.95,0.1),
-                    get_point(0.95,0.9),
-                    get_point(0.9,0.9),   
-                ]).get_sequence(points),
-                
-                euklid.spline.BSplineCurve([
-                    get_point(0.75,0.9),
-                    get_point(0.7,0.9),
-                    get_point(0.7,0.1),
-                    get_point(0.8,0.1),
-                    get_point(0.8,0.9),
-                    get_point(0.75,0.9),   
-                ]).get_sequence(points),
+        if self.trailing_edge_cut is not None:
+            end -= to_percentage(self.trailing_edge_cut).si
 
-                euklid.spline.BSplineCurve([
-                    get_point(0.625,0.9),
-                    get_point(0.575,0.9),
-                    get_point(0.575,0.1),
-                    get_point(0.65,0.1),
-                    get_point(0.65,0.9),
-                    get_point(0.625,0.9),   
-                ]).get_sequence(points),
+        border_holes = to_percentage(self.hole_border_side).si
 
-                euklid.spline.BSplineCurve([
-                    get_point(0.5,0.9),
-                    get_point(0.475,0.9),
-                    get_point(0.475,0.1),
-                    get_point(0.525,0.1),
-                    get_point(0.525,0.9),
-                    get_point(0.5,0.9),   
-                ]).get_sequence(points),
+        total_border = (self.hole_num + 1) * border_holes
+        hole_width = (1 - total_border) / self.hole_num
 
+        x_left = border_holes
 
-                
+        # draw holes
+        for _ in range(self.hole_num):
+            x_right = x_left + hole_width
+            x_center = (x_left+x_right)/2
 
+            points = [
+                get_bottom(x_left),
+                get_bottom(x_right),
+                get_top(x_right),
+                get_top(x_left)
             ]
 
-            centers = [
+            holes.append(polygon(points, self.hole_curve_factor, num_points))
+            centers.append((get_top(x_center) + get_bottom(x_center))* 0.5)
 
-                get_point(0.9, 0.5),
-                get_point(0.75, 0.5),
-                get_point(0.625, 0.5),
-                get_point(0.5, 0.5),
-            ]
+            x_left = x_right + border_holes
 
         return holes, centers
-
