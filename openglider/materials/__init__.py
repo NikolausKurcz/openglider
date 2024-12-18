@@ -26,7 +26,7 @@ class MaterialRegistry:
             for line in data:
                 material = Material(
                     manufacturer=line[0],
-                    name=line[1],
+                    name=line[1].lower(),
                     weight=float(line[2]),
                     color=line[3],
                     color_code=line[4]
