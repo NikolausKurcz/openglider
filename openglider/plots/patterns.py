@@ -23,7 +23,8 @@ from openglider.plots.usage_stats import MaterialUsage
 from openglider.utils.config import Config
 from openglider.vector.drawing import Layout
 from openglider.vector.text import Text
-
+from openglider.plots.sketches.shapeplot import ShapePlotConfig
+import openglider.plots.sketches as sketch
 #import openglider.plots.sketches
 
 logger = logging.getLogger(__name__)
@@ -31,12 +32,18 @@ logger = logging.getLogger(__name__)
 class PatternsNew:
     plotmaker = PlotMaker
     config: PatternConfigOld
+    shapeplotconfig = ShapePlotConfig(apply_zrot=True)
+    
 
     DefaultConf = PlotMaker.DefaultConf
 
     def __init__(self, project: GliderProject, config: Config | None=None):
         self.project = self.prepare_glider_project(project)
         self.config = self.DefaultConf(config)
+
+
+        self.shapeplot = sketch.ShapePlot(self.project)
+        self.shapes = self.shapeplot._get_shapes(self.shapeplotconfig)
 
 
         self.glider_2d = self.project.glider
@@ -54,26 +61,25 @@ class PatternsNew:
         return project
 
     def _get_sketches(self) -> list[Layout]:
-        import openglider.plots.sketches as sketch
-        shapeplot = sketch.ShapePlot(self.project)
-        design_upper = shapeplot.copy().draw_design(lower=True)
-        design_upper.draw_cell_names()
-        design_lower = shapeplot.copy().draw_design(lower=False)
+        shapeplot = self.shapeplot
+        design_upper = shapeplot.copy().draw_design(self.shapes, lower=True)
+        design_upper.draw_cell_names(self.shapes)
+        design_lower = shapeplot.copy().draw_design(self.shapes, lower=False)
 
         lineplan = shapeplot.copy()
-        lineplan.draw_design(lower=True)
-        lineplan.draw_attachment_points()
-        lineplan.draw_rib_names()
+        lineplan.draw_design(self.shapes, lower=True)
+        lineplan.draw_attachment_points(self.shapes)
+        lineplan.draw_rib_names(self.shapes)
 
         diagonals = sketch.ShapePlot(self.project)
-        diagonals.draw_cells()
-        diagonals.draw_attachment_points(add_text=False)
-        diagonals.draw_diagonals()
+        diagonals.draw_cells(self.shapes)
+        diagonals.draw_attachment_points(self.shapes, add_text=False)
+        diagonals.draw_diagonals(self.shapes)
 
         straps = sketch.ShapePlot(self.project)
-        straps.draw_cells()
-        straps.draw_attachment_points(add_text=False)
-        straps.draw_straps()
+        straps.draw_cells(self.shapes)
+        straps.draw_attachment_points(self.shapes, add_text=False)
+        straps.draw_straps(self.shapes)
 
         drawings: list[Layout] = [design_upper.drawing, design_lower.drawing, lineplan.drawing, diagonals.drawing, straps.drawing]
 
@@ -127,7 +133,7 @@ class PatternsNew:
         all_patterns.scale(1000)
         all_patterns.export_dxf(outdir / "plots_all.dxf")
 
-        sketches = openglider.plots.sketches.get_all_plots(self.project)
+        sketches = openglider.plots.sketches.get_all_plots(self.project, self.shapes)
 
         for sketch_name, sketch in sketches.items():
             fill = False
