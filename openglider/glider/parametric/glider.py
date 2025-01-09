@@ -79,7 +79,7 @@ class ParametricGlider:
         for rib_no, p in enumerate(self.shape.baseline):
             table[1+rib_no, 3] = p[0]
             table[1+rib_no, 4] = p[1]
-            table[1+rib_no, 5] = self.shape.baseline_pos
+            table[1+rib_no, 5] = self.config.baseline_pct
 
         last_angle = 0.
         for cell_no, angle in enumerate(self.get_arc_angles()):

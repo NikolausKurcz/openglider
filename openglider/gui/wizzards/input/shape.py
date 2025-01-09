@@ -284,8 +284,8 @@ class ShapeSettingsWidget(QtWidgets.QWidget):
         return self.input_scale.currentIndex() == 2
     
     def update_zrot(self, value: bool=False) -> None:
-        self.zrot = not self.zrot
-        self.input_zrot.setChecked(self.zrot)
+        self.settings.zrot = not self.settings.zrot
+        self.input_zrot.setChecked(self.settings.zrot)
         self.changed.emit()
     
     def update_shape(self, shape: ParametricShape) -> None:

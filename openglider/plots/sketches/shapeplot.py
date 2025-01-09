@@ -72,7 +72,9 @@ class ShapePlot:
     attachment_point_mark = marks.Cross(name="attachment_point", rotation=np.pi/4)
 
     config: ShapePlotConfig | None = None
+
     shapes: tuple[Shape, Shape] | None = None
+    shapes_rot: tuple[Shape, Shape] | None = None
 
     def __init__(self, project: GliderProject, drawing: Layout | None=None):
         super().__init__()
@@ -84,37 +86,46 @@ class ShapePlot:
         self.reference_area = self.glider_2d.shape.area
         self.reference_span = self.glider_2d.shape.span
 
-    def _get_shapes(self, config: ShapePlotConfig, force: bool=False) -> tuple[Shape, Shape]:
-        if force or self.config is None or self.shapes is None or config.apply_zrot != self.config.apply_zrot:
-            if config.apply_zrot:
-                zrot = [rib.zrot for rib in self.glider_3d.ribs]
+    def _get_shapes(self, config: ShapePlotConfig | None = None, force: bool=False) -> tuple[Shape, Shape]:
+        if config is None:
+            if self.config is not None:
+                config = self.config
             else:
-                zrot = None
-            shape_r = self.glider_2d.shape.get_half_shape(zrot=zrot)
-            shape_l = shape_r.copy().scale(x=-1)
-            self.shapes = (shape_r, shape_l)
-        
-        return self.shapes
+                config = ShapePlotConfig()
 
+        if config.apply_zrot:
+            if force or self.shapes_rot is None:
+                zrot = [rib.zrot for rib in self.glider_3d.ribs]
+                shape_r = self.glider_2d.shape.get_half_shape(zrot=zrot)
+                shape_l = shape_r.copy().scale(x=-1)
+                self.shapes_rot = (shape_r, shape_l)
+            
+            return self.shapes_rot
+        
+        else:
+            if force or self.shapes is None:
+                shape_r = self.glider_2d.shape.get_half_shape(zrot=None)
+                shape_l = shape_r.copy().scale(x=-1)
+                self.shapes = (shape_r, shape_l)
+
+            return self.shapes
     
     def redraw(self, config: ShapePlotConfig, force: bool=False) -> Layout:
-        shapes = self._get_shapes(config, force)
-        
         if config != self.config or force:
+            self.config = config
             self.drawing = Layout()
 
             for layer_name, show_layer in config.view_layers().items():
                 if show_layer:
                     f = getattr(self, f"draw_{layer_name}")
-                    f(shapes, left=True)
-                    f(shapes, left=False)
+                    f(left=True)
+                    f(left=False)
         
             if config.scale_area:
                 self.drawing.scale(math.sqrt(config.scale_area/self.reference_area))
             elif config.scale_span:
                 self.drawing.scale(config.scale_span/self.reference_span)
             
-            self.config = config
         
         return self.drawing
 
@@ -140,13 +151,14 @@ class ShapePlot:
 
         return range(start, end)
     
-    def draw_design_lower(self, shapes: tuple[Shape, Shape], left: bool=False) -> ShapePlot:
-        return self.draw_design(shapes, True, left)
+    def draw_design_lower(self, left: bool=False) -> ShapePlot:
+        return self.draw_design(True, left)
     
-    def draw_design_upper(self, shapes: tuple[Shape, Shape], left: bool=False) -> ShapePlot:
-        return self.draw_design(shapes, False, left)
+    def draw_design_upper(self, left: bool=False) -> ShapePlot:
+        return self.draw_design(False, left)
 
-    def draw_design(self, shapes: tuple[Shape, Shape], lower: bool=True, left: bool=False) -> ShapePlot:
+    def draw_design(self, lower: bool=True, left: bool=False) -> ShapePlot:
+        shapes = self._get_shapes()
         shape = shapes[left]
 
         panels = self.glider_2d.get_panels()
@@ -191,11 +203,12 @@ class ShapePlot:
 
         return self
 
-    def draw_baseline(self, shapes: tuple[Shape, Shape], pct: float | None=None, left: bool=False) -> None:
+    def draw_baseline(self, pct: float | None=None, left: bool=False) -> None:
+        shapes = self._get_shapes()
         shape = shapes[left]
 
         if pct is None:
-            pct = self.glider_2d.shape.baseline_pos.si
+            pct = self.glider_2d.config.baseline_pct.si
 
         part = PlotPart()
         
@@ -203,18 +216,19 @@ class ShapePlot:
         part.layers["marks"].append(line)
         self.drawing.parts.append(part)
 
-    def draw_grid(self, shapes: tuple[Shape, Shape], num: int=11, left: bool=False) -> ShapePlot:
+    def draw_grid(self, num: int=11, left: bool=False) -> ShapePlot:
         import numpy as np
 
         for x in np.linspace(0, 1, num):
             self.draw_baseline(x, left=left)
 
-        self.draw_cells(shapes, left=left)
+        self.draw_cells(left=left)
         return self
 
-    def _get_attachment_point_positions(self, shapes: tuple[Shape, Shape], left: bool=False) -> dict[str, euklid.vector.Vector2D]:
+    def _get_attachment_point_positions(self, left: bool=False) -> dict[str, euklid.vector.Vector2D]:
 
         points = {}
+        shapes = self._get_shapes()
         shape = shapes[left]
 
         for rib_no, rib in enumerate(self.glider_3d.ribs):
@@ -228,9 +242,9 @@ class ShapePlot:
         return points
 
 
-    def draw_attachment_points(self, shapes: tuple[Shape, Shape], add_text: bool=True, left: bool=False) -> None:
+    def draw_attachment_points(self, add_text: bool=True, left: bool=False) -> None:
         part = PlotPart()
-        points = self._get_attachment_point_positions(shapes, left=left)
+        points = self._get_attachment_point_positions(left=left)
 
         for name, p1 in points.items():
             p2 = p1 + euklid.vector.Vector2D([0.1, 0])
@@ -252,7 +266,8 @@ class ShapePlot:
 
         self.drawing.parts.append(part)
 
-    def draw_cells(self, shapes: tuple[Shape, Shape], left: bool=False) -> None:
+    def draw_cells(self, left: bool=False) -> None:
+        shapes = self._get_shapes()
         shape = shapes[left]
 
         cells = []
@@ -269,7 +284,8 @@ class ShapePlot:
             material_code="cell_numbers")
         )
 
-    def draw_cell_names(self, shapes: tuple[Shape, Shape], left: bool=False) -> None:
+    def draw_cell_names(self, left: bool=False) -> None:
+        shapes = self._get_shapes()
         shape = shapes[left]
         names = []
         
@@ -287,7 +303,8 @@ class ShapePlot:
             material_code="cell_numbers")
         )
 
-    def draw_rib_names(self, shapes: tuple[Shape, Shape], left: bool=False) -> ShapePlot:
+    def draw_rib_names(self, left: bool=False) -> ShapePlot:
+        shapes = self._get_shapes()
         shape = shapes[left]
         names = []
 
@@ -312,7 +329,8 @@ class ShapePlot:
         )
         return self
 
-    def draw_straps(self, shapes: tuple[Shape, Shape], left: bool=False) -> ShapePlot:
+    def draw_straps(self, left: bool=False) -> ShapePlot:
+        shapes = self._get_shapes()
         shape = shapes[left]
 
         for cell_no in self._get_cell_range(left):
@@ -328,7 +346,8 @@ class ShapePlot:
 
         return self
 
-    def draw_diagonals(self, shapes: tuple[Shape, Shape], left: bool=False) -> ShapePlot:
+    def draw_diagonals(self, left: bool=False) -> ShapePlot:
+        shapes = self._get_shapes()
         shape = shapes[left]
 
         for cell_no in self._get_cell_range(left):
@@ -344,14 +363,14 @@ class ShapePlot:
 
         return self
 
-    def draw_lines(self, shapes: tuple[Shape, Shape], left: bool=True, add_text: bool=False) -> ShapePlot:
+    def draw_lines(self, left: bool=True, add_text: bool=False) -> ShapePlot:
         #self.draw_design(lower=True)
         #self.draw_design(lower=True, left=True)
         #self.draw_attachment_points(True)
         #self.draw_attachment_points(True, left=True)
         lower = self.glider_3d.lineset.lower_attachment_points
 
-        attachment_point_positions = self._get_attachment_point_positions(shapes, left=False)
+        attachment_point_positions = self._get_attachment_point_positions(left=False)
         all_nodes = {}
         for node in self.glider_3d.lineset.nodes:
             if node.node_type == node.NODE_TYPE.UPPER:

@@ -97,8 +97,8 @@ class GliderTables:
         table.append_right(self.rib_modifiers.table)
         table.append_right(self.material_ribs.table)
 
-        for i in range(1, table.num_rows+1):
-            table[i, 0] = str(i)
+        for i in range(2, table.num_rows+1):
+            table[i, 0] = f"rib {i-1}"
 
         return table
     
@@ -116,8 +116,8 @@ class GliderTables:
         table.append_right(self.attachment_points_cell.table)
         table.append_right(self.ballooning_modifiers.table)
 
-        for i in range(1, table.num_rows+1):
-            table[i, 0] = str(i)
+        for i in range(2, table.num_rows+1):
+            table[i, 0] = f"cell {i-1}"
 
         return table
     

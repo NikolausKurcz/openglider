@@ -21,7 +21,7 @@ from openglider.plots.sketches.shapeplot import ShapePlot
 from openglider.utils.table import Table
 
 from openglider.gui.app.main_window import MainWindow
-from openglider.vector.unit import Angle, Length, Percentage, Quantity
+from openglider.vector.unit import Angle, Length, Percentage
 
 logger = logging.getLogger(__name__)
 # TODO: Show & change data: Area, Aspect ratio, Span, Tip Chord, Tip center
@@ -256,7 +256,10 @@ class CurveWizard(Wizard):
         p1 = euklid.vector.Vector2D([1., 0.5])
         p2 = euklid.vector.Vector2D([2., 0.5])
         p3 = euklid.vector.Vector2D([self.shape.rib_no-1, 0.5])
-        self.curve_list.add("unnamed", ShapeBSplineCurve([p1, p2, p3], shape=self.shape))
+        self.curve_list.add(
+            "unnamed",
+            ShapeBSplineCurve([p1, p2, p3], shape=self.shape)  # type: ignore
+        )
         self.curve_list_selector.render()
         self.selection_changed()
 

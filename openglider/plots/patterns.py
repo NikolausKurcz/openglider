@@ -3,7 +3,7 @@ import logging
 import euklid
 import string
 import subprocess
-from typing import Any
+from typing import Any, Iterable
 from pathlib import Path
 
 import openglider.glider
@@ -206,7 +206,7 @@ class Patterns(PatternsNew):
 
                 return f"{name}{layers_between[name]}"
             
-            def rename_straps(straps: list[DiagonalRib], prefix: str = ""):
+            def rename_straps(straps: Iterable[DiagonalRib], prefix: str = "") -> None:
                 straps = list(straps)
                 straps.sort(key=lambda strap: abs(strap.get_average_x()))
                 for strap in straps:

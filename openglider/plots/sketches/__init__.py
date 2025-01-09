@@ -14,7 +14,7 @@ def get_all_plots(project: GliderProject) -> dict[str, ShapePlot]:
     design_lower.draw_cells()
     design_lower.draw_cells(left=True)
 
-    lineplan = LinePlan(project)  #.draw_shape().draw_attachment_points()
+    lineplan = LinePlan(project)
     lineplan.draw_cells()
     lineplan.draw_cells(left=True)
     lineplan.draw_attachment_points(add_text=False)
