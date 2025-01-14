@@ -18,7 +18,7 @@ from openglider.glider.glider import Glider
 from openglider.glider.project import GliderProject
 from openglider.plots.config import PatternConfigOld
 from openglider.plots.glider import PlotMaker
-from openglider.plots.spreadsheets import get_glider_data
+from openglider.plots.spreadsheets import get_glider_data, get_glider_data_internal
 from openglider.plots.usage_stats import MaterialUsage
 from openglider.utils.config import Config
 from openglider.vector.drawing import Layout
@@ -139,7 +139,10 @@ class PatternsNew:
         self.logger.info("create spreadsheets")
         self.project.get_glider_3d().lineset.rename_lines()
         excel = get_glider_data(self.project, consumption=self.weight)
-        excel.saveas(outdir / f"{self.project.name}.ods")
+        excel_internal = get_glider_data_internal(self.project)
+        excel.saveas(outdir / f"{self.project.name}_production.ods")
+        excel_internal.saveas(outdir / f"{self.project.name}_internal.ods")
+
 
         openglider.save(self.project, outdir / "project.json")
 

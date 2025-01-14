@@ -82,3 +82,42 @@ def get_glider_data(project: GliderProject, consumption: dict[str, MaterialUsage
         append_sheet(sheet)
 
     return out_ods
+
+def get_glider_data_internal(project: GliderProject) -> ezodf.document.PackagedDocument:
+    specsheet = project.get_data_table()
+    glider = project.get_glider_3d()
+    glider.lineset.recalc(glider=glider, iterations=30)
+
+    linesheet2 = glider.lineset.get_table_2(line_load=True)
+    
+    
+    
+    
+ 
+    out_ods = ezodf.newdoc(doctype="ods")
+    def append_sheet(table: Table) -> None:
+        now = datetime.now()
+        header = Table(name=table.name)
+        header["A1"] = table.name or "-"
+        header["B1"] = "Plotfiles date"
+        header["C1"] = now.strftime("%d.%m.%Y")
+        header["D1"] = now.strftime("%H:%M")
+        header["A2"] = project.name or "-"
+        header["B2"] = "Modification date"
+        header["C2"] = project.modified.strftime("%d.%m.%Y")
+        header["D2"] = project.modified.strftime("%H:%M")
+
+        header.append_bottom(table, space=1)
+        out_ods.sheets.append(header.get_ods_sheet())
+
+    sheets = (
+        specsheet,
+        linesheet2,
+        #linesheet_force
+    )
+    
+    for sheet in sheets:
+        append_sheet(sheet)
+
+    return out_ods
+
