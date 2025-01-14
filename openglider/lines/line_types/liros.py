@@ -183,6 +183,7 @@ def ppsls(name: int, thickness: float, stretch: float, max_load: float, weight: 
 
 ppsls(65, 0.76, 3.0, 650, 0.4)
 ppsls(125, 1.05, 2.7, 1250, 0.89)
+ppsls(160, 1.15, 3.0, 1600, 0.91)
 ppsls(180, 1.2, 3.2, 1800, 0.92)
 ppsls(200, 1.3, 3.0, 2000, 1.65)
 ppsls(260, 1.58, 2.8, 2600, 1.98)

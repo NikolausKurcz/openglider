@@ -796,7 +796,7 @@ class LineSet:
         return self._get_lines_table(get_line_force)
 
 
-    def get_table_2(self) -> Table:
+    def get_table_2(self, line_load: bool=False) -> Table:
         table = Table(name="lines_table")
 
         table[0, 0] = "Name"
@@ -809,6 +809,12 @@ class LineSet:
         table[0, 7] = "Knot Correction"
         table[0, 8] = "Manual Correction"
         table[0, 9] = "Cutting Length"
+
+        if line_load:
+            table[0, 10] = "Force"
+            table[0, 11] = "Min Break Load"
+            table[0, 12] = "Percentage"
+        
 
         lines = self.sort_lines(by_names=True)
         for i, line in enumerate(lines):
@@ -824,6 +830,11 @@ class LineSet:
             table[i+2, 7] = round(line_length.knot_correction * 1000)
             table[i+2, 8] = round(line_length.manual_correction * 1000)
             table[i+2, 9] = round(line_length.get_cutting_length() * 1000)
+            if line_load:
+                table[i+2, 10] = round(line.force)
+                table[i+2, 11] = round(line.line_type.min_break_load)
+                table[i+2, 12] = f"{100*line.force/line.line_type.min_break_load:.1f}%"
+
         
         return table
 
