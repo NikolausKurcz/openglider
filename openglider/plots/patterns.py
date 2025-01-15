@@ -212,9 +212,18 @@ class Patterns(PatternsNew):
             def rename_straps(straps: Iterable[DiagonalRib], prefix: str = "") -> None:
                 straps = list(straps)
                 straps.sort(key=lambda strap: abs(strap.get_average_x()))
+                logger = logging.getLogger(f"{__class__.__module__}.{__class__.__name__}")
                 for strap in straps:
-                    strap.name = f"{prefix}{cell_no+1}{get_name(strap.side1, cell.rib1)}"
+                    strap_side = strap.side1
+                    rib = cell.rib1
+                    if (not strap.is_lower or not strap.is_upper) and strap.side2.is_lower:
+                            strap_side = strap.side2
+                            rib = cell.rib2
+
+                    strap.name = f"{prefix}{cell_no+1}{get_name(strap_side, rib)}"
 
             rename_straps(filter(lambda strap: strap.is_lower, cell.straps), "B")
+            layers_between: dict[str, int] = {}
             rename_straps(filter(lambda strap: not strap.is_lower, cell.straps), "T")
+            layers_between: dict[str, int] = {}
             rename_straps(cell.diagonals[:], "D")
