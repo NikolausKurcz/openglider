@@ -24,7 +24,7 @@ class MiniRib:
     chord: float = 0.3
     name: str="unnamed_minirib"
     material_code: str="unnamed_material"
-    seam_allowance: Length = Length("10mm")
+    seam_allowance: Length = Length("6mm")
     trailing_edge_cut: Length = Length("20mm")
     mrib_num: int = 0
     function: euklid.vector.Interpolation = Field(default_factory=lambda: euklid.vector.Interpolation([]))
