@@ -212,7 +212,6 @@ class Patterns(PatternsNew):
             def rename_straps(straps: Iterable[DiagonalRib], prefix: str = "") -> None:
                 straps = list(straps)
                 straps.sort(key=lambda strap: abs(strap.get_average_x()))
-                logger = logging.getLogger(f"{__class__.__module__}.{__class__.__name__}")
                 for strap in straps:
                     strap_side = strap.side1
                     rib = cell.rib1
