@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 class Glider:
     cell_naming_scheme = "{cell_no}"
-    rib_naming_scheme = "{rib_no}"
+    rib_naming_scheme = "p{rib_no}"
 
     cells: list[Cell]
     lineset: LineSet
