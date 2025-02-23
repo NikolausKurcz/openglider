@@ -12,6 +12,21 @@ import vtkmodules.vtkCommonColor
 import vtkmodules.vtkFiltersCore
 import vtkmodules.vtkFiltersSources
 import vtkmodules.vtkRenderingCore
+from vtkmodules.vtkFiltersTexture import vtkImplicitTextureCoords
+from vtkmodules.vtkCommonDataModel import vtkQuadric
+
+
+from vtkmodules.vtkIOImage import vtkImageReader2Factory
+from vtkmodules.vtkRenderingCore import (
+    vtkActor,
+    vtkPolyDataMapper,
+    vtkRenderWindow,
+    vtkRenderWindowInteractor,
+    vtkRenderer,
+    vtkDataSetMapper,
+    vtkTexture
+)
+
 
 import euklid
 from openglider.lines.lineset import LineSet
@@ -160,6 +175,7 @@ class MeshView(vtkmodules.vtkRenderingCore.vtkActor):
     hex_regex = re.compile(r".*#([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})")
     base_color = (150, 150, 150)
     smooth = True
+    texture_mapping = True
     colors: vtkmodules.vtkCommonCore.vtkUnsignedCharArray
 
     def __init__(self) -> None:
@@ -175,6 +191,8 @@ class MeshView(vtkmodules.vtkRenderingCore.vtkActor):
 
         self.mapper = vtkmodules.vtkRenderingCore.vtkPolyDataMapper()
         self.mapper.SetInputData(self.polydata)
+     
+        #self.mapper.SetInputConnection(self.polygons.GetOut)
 
         self.colors = vtkmodules.vtkCommonCore.vtkUnsignedCharArray()
         self.colors.SetNumberOfComponents(3)
@@ -184,6 +202,15 @@ class MeshView(vtkmodules.vtkRenderingCore.vtkActor):
         #self.GetProperty().SetInterpolationToGouraud()
 
         self.SetMapper(self.mapper)
+
+        fileName = "/home/niki/openglider/texture.png"
+        readerFactory = vtkImageReader2Factory()
+        self.textureFile = readerFactory.CreateImageReader2(fileName)
+        self.textureFile.SetFileName(fileName)
+  
+
+
+
 
     def draw_mesh(self, mesh: openglider.mesh.Mesh, colors: bool=True) -> None:
         vertices, polygons, boundaries = mesh.get_indexed()
@@ -242,6 +269,47 @@ class MeshView(vtkmodules.vtkRenderingCore.vtkActor):
             polydata = pdnorm.GetOutput()
 
             self.mapper.SetInputData(polydata)
+
+        if self.texture_mapping:
+
+            #https://examples.vtk.org/site/Python/Texture/TextureCutQuadric/
+
+            self.textureFile.Update()
+
+             # define two elliptical cylinders
+            quadric1 = vtkQuadric()
+            quadric1.SetCoefficients(0, 1, 0, 0, 0, 0, 0, 0, 0, 0)
+
+            quadric2 = vtkQuadric()
+            quadric2.SetCoefficients(1, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+
+            atext = vtkTexture()
+            atext.SetInputConnection(self.textureFile.GetOutputPort())
+            atext.InterpolateOn()
+            atext.Update()
+            temp = atext.GetOutputPort()
+
+            tcoords = vtkImplicitTextureCoords()
+            #tcoords.SetInputConnection(self.polydata)
+            tcoords.SetInputData(self.polydata)
+            tcoords.SetRFunction(quadric1)
+            tcoords.SetSFunction(quadric2)
+
+
+
+            aMapper = vtkDataSetMapper()
+            aMapper.SetInputConnection(tcoords.GetOutputPort())
+
+            #self.polydata.GetPointData().SetTCoords(vtk_poly_map)
+
+
+            self.SetMapper(aMapper)
+            self.SetTexture(atext)
+
+            logger.info("setMapping")
+
+
+
 
 
 
