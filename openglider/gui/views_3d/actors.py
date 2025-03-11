@@ -212,7 +212,7 @@ class MeshView(vtkmodules.vtkRenderingCore.vtkActor):
 
 
 
-    def draw_mesh(self, mesh: openglider.mesh.Mesh, colors: bool=True) -> None:
+    def draw_mesh(self, mesh: openglider.mesh.Mesh, colors: bool=True, texture_mapping: bool=False) -> None:
         vertices, polygons, boundaries = mesh.get_indexed()
 
         for p in vertices:
@@ -270,7 +270,7 @@ class MeshView(vtkmodules.vtkRenderingCore.vtkActor):
 
             self.mapper.SetInputData(polydata)
 
-        if self.texture_mapping:
+        if texture_mapping:
 
             #https://examples.vtk.org/site/Python/Texture/TextureCutQuadric/
 
@@ -333,7 +333,7 @@ class PanelView(MeshView):
         if right:
             mesh += panel_mesh.copy().mirror("y")
             
-        self.draw_mesh(mesh)
+        self.draw_mesh(mesh, texture_mapping=True)
 
         color_lst = self.panel.material.get_color_rgb()
         self.GetProperty().SetColor(*color_lst)

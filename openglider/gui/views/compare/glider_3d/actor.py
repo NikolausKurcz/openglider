@@ -38,7 +38,7 @@ class GliderActors:
                     panel_mesh += mesh_temp.copy().mirror("y")
 
         mesh_view = MeshView()
-        mesh_view.draw_mesh(panel_mesh)
+        mesh_view.draw_mesh(panel_mesh, texture_mapping=True)
         return mesh_view
     
     def get_ribs(self, hole_numpoints: int) -> MeshView:
