@@ -13,9 +13,8 @@ import vtkmodules.vtkFiltersCore
 import vtkmodules.vtkFiltersSources
 import vtkmodules.vtkRenderingCore
 from vtkmodules.vtkFiltersTexture import vtkImplicitTextureCoords
-from vtkmodules.vtkCommonDataModel import vtkQuadric
-from vtkmodules.vtkImagingCore import vtkImageClip
-
+from vtkmodules.vtkCommonDataModel import vtkQuadric, vtkImageData
+from vtkmodules.vtkImagingCore import vtkImageClip, vtkImageMask, vtkImageThreshold
 
 
 from vtkmodules.vtkIOImage import vtkImageReader2Factory
@@ -208,21 +207,43 @@ class MeshView(vtkmodules.vtkRenderingCore.vtkActor):
 
         fileName = "/home/niki/openglider/texture.png"
         readerFactory = vtkImageReader2Factory()
-        self.textureFile = readerFactory.CreateImageReader2(fileName)
-        self.textureFile.SetFileName(fileName)
-
-        self.textureFile.Update()
+        textureFile = readerFactory.CreateImageReader2(fileName)
+        textureFile.SetFileName(fileName)
+        textureFile.Update()
 
         # Apply vtkImageClip to clip the image
-        self.clipper = vtkImageClip()
-        self.clipper.SetInputConnection(self.textureFile.GetOutputPort())
+        clipper = vtkImageClip()
+        clipper.SetInputConnection(textureFile.GetOutputPort())
 
         # Define the clip extent (xmin, xmax, ymin, ymax, zmin, zmax)
-        clip_extent = [50, 200, 50, 200, 0, 0]  # Modify these values as needed
-        self.clipper.SetOutputWholeExtent(*clip_extent)
-        self.clipper.ClipDataOn()  # Enable clipping
-        self.clipper.Update()
+        clip_extent = [0, 1063, 0, 979, 0, 0]  # Modify these values as needed
+        clipper.SetOutputWholeExtent(*clip_extent)
+        clipper.ClipDataOn()  # Enable clipping
+        clipper.Update()
 
+        # Create a binary mask image
+        mask = vtkImageData()
+        mask.DeepCopy(clipper.GetOutput())  # Copy image dimensions
+        mask.AllocateScalars(clipper.GetOutput().GetScalarType(), 1)  # Single-channel mask
+
+        # Define the mask region manually
+        dims = mask.GetDimensions()
+        for z in range(dims[2]):
+            for y in range(dims[1]):
+                for x in range(dims[0]):
+                    if 0 <= x <= 1069 and 0 <= y <= 979:  # Define a mask region
+                        mask.SetScalarComponentFromDouble(x, y, z, 0, 255)  # Keep this region
+                    else:
+                        mask.SetScalarComponentFromDouble(x, y, z, 0, 0)  # Mask out
+
+        # Apply the mask using vtkImageMask
+        image_mask = vtkImageMask()
+        image_mask.SetInputConnection(clipper.GetOutputPort())  # Input image
+        image_mask.SetMaskInputData(mask)  # Mask image
+        image_mask.SetMaskedOutputValue(0)  # Set background to black (or another value)
+        image_mask.Update()
+
+        self.panel_texture = image_mask
 
 
 
@@ -290,7 +311,7 @@ class MeshView(vtkmodules.vtkRenderingCore.vtkActor):
             #https://examples.vtk.org/site/Python/Texture/TextureCutQuadric/
 
             self.mapper.SetInputData(polydata)
-            self.textureFile.Update()
+            self.panel_texture.Update()
 
              # define two elliptical cylinders
             quadric1 = vtkQuadric()
@@ -300,7 +321,7 @@ class MeshView(vtkmodules.vtkRenderingCore.vtkActor):
             quadric2.SetCoefficients(1, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 
             atext = vtkTexture()
-            atext.SetInputConnection(self.clipper.GetOutputPort())
+            atext.SetInputConnection(self.panel_texture.GetOutputPort())
             atext.InterpolateOn()
             atext.Update()
             temp = atext.GetOutputPort()
