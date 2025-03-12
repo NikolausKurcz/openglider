@@ -14,6 +14,8 @@ import vtkmodules.vtkFiltersSources
 import vtkmodules.vtkRenderingCore
 from vtkmodules.vtkFiltersTexture import vtkImplicitTextureCoords
 from vtkmodules.vtkCommonDataModel import vtkQuadric
+from vtkmodules.vtkImagingCore import vtkImageClip
+
 
 
 from vtkmodules.vtkIOImage import vtkImageReader2Factory
@@ -201,13 +203,26 @@ class MeshView(vtkmodules.vtkRenderingCore.vtkActor):
         self.GetProperty().SetInterpolationToPhong()
         #self.GetProperty().SetInterpolationToGouraud()
 
+
         self.SetMapper(self.mapper)
 
         fileName = "/home/niki/openglider/texture.png"
         readerFactory = vtkImageReader2Factory()
         self.textureFile = readerFactory.CreateImageReader2(fileName)
         self.textureFile.SetFileName(fileName)
-  
+
+        self.textureFile.Update()
+
+        # Apply vtkImageClip to clip the image
+        self.clipper = vtkImageClip()
+        self.clipper.SetInputConnection(self.textureFile.GetOutputPort())
+
+        # Define the clip extent (xmin, xmax, ymin, ymax, zmin, zmax)
+        clip_extent = [50, 200, 50, 200, 0, 0]  # Modify these values as needed
+        self.clipper.SetOutputWholeExtent(*clip_extent)
+        self.clipper.ClipDataOn()  # Enable clipping
+        self.clipper.Update()
+
 
 
 
@@ -268,12 +283,13 @@ class MeshView(vtkmodules.vtkRenderingCore.vtkActor):
             pdnorm.Update()
             polydata = pdnorm.GetOutput()
 
-            self.mapper.SetInputData(polydata)
+            
 
         if texture_mapping:
 
             #https://examples.vtk.org/site/Python/Texture/TextureCutQuadric/
 
+            self.mapper.SetInputData(polydata)
             self.textureFile.Update()
 
              # define two elliptical cylinders
@@ -284,7 +300,7 @@ class MeshView(vtkmodules.vtkRenderingCore.vtkActor):
             quadric2.SetCoefficients(1, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 
             atext = vtkTexture()
-            atext.SetInputConnection(self.textureFile.GetOutputPort())
+            atext.SetInputConnection(self.clipper.GetOutputPort())
             atext.InterpolateOn()
             atext.Update()
             temp = atext.GetOutputPort()
