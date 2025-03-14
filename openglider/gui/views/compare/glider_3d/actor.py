@@ -1,4 +1,5 @@
 import logging
+import re
 
 import openglider.mesh
 from openglider.glider.glider import Glider
@@ -16,6 +17,7 @@ class GliderActors:
     glider_3d: Glider | None
     config: GliderViewConfig | None
     actors: dict[str, MeshView]
+    printed_regex = re.compile(r".*printed")
 
     def __init__(self, project: GliderProject):
         self.project = project
@@ -26,19 +28,28 @@ class GliderActors:
     def get_panels(self, numribs: int) -> MeshView:
         if self.glider_3d is None:
             raise ValueError("Glider3D not set")
-
+        
+        
         panel_mesh = openglider.mesh.Mesh()
+        mesh_view = MeshView()
 
         for i, cell in enumerate(self.glider_3d.cells):
             for panel in cell.panels:
-                mesh_temp = panel.get_mesh(cell, numribs=numribs)
-                panel_mesh += mesh_temp
+                panel_mesh = panel.get_mesh(cell, numribs=numribs)
+                mesh_temp = panel_mesh
 
                 if not (i == 0 and self.glider_3d.has_center_cell):
                     panel_mesh += mesh_temp.copy().mirror("y")
 
-        mesh_view = MeshView()
-        mesh_view.draw_mesh(panel_mesh, texture_mapping=True)
+                printed_match = self.printed_regex.match(panel.material.name.upper())
+            
+                if printed_match:
+                    mesh_view.draw_mesh(panel_mesh, texture_mapping=True)
+                else:
+                    mesh_view.draw_mesh(panel_mesh, texture_mapping=False)
+
+                logger.info(f"Draw_Printed_Match:{printed_match}")
+                
         return mesh_view
     
     def get_ribs(self, hole_numpoints: int) -> MeshView:

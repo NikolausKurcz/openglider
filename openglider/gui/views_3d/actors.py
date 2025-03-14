@@ -174,10 +174,12 @@ class CellView(vtkmodules.vtkRenderingCore.vtkActor):
 
 class MeshView(vtkmodules.vtkRenderingCore.vtkActor):
     hex_regex = re.compile(r".*#([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})")
+    printed_regex = re.compile(r".*printed")
     base_color = (150, 150, 150)
     smooth = True
     texture_mapping = True
     colors: vtkmodules.vtkCommonCore.vtkUnsignedCharArray
+    printed: vtkmodules.vtkCommonCore.vtkUnsignedCharArray
 
     def __init__(self) -> None:
         super().__init__()
@@ -198,6 +200,11 @@ class MeshView(vtkmodules.vtkRenderingCore.vtkActor):
         self.colors = vtkmodules.vtkCommonCore.vtkUnsignedCharArray()
         self.colors.SetNumberOfComponents(3)
         self.colors.SetName("Colors")
+
+        self.printed = vtkmodules.vtkCommonCore.vtkUnsignedCharArray()
+        self.printed.SetNumberOfComponents(3)
+        self.printed.SetName("Printed")
+
         self.polydata.GetCellData().SetScalars(self.colors)
         self.GetProperty().SetInterpolationToPhong()
         #self.GetProperty().SetInterpolationToGouraud()
@@ -258,10 +265,15 @@ class MeshView(vtkmodules.vtkRenderingCore.vtkActor):
         polygon_colors = []
 
         for name, polys in polygons.items():
+            
+            logger.info(f"Panel_Mesh_Color_info:{name}")
 
             color_match = self.hex_regex.match(name.upper())
+            #printed_match = self.printed_regex.match(name.upper())
             if color_match:
                 color_lst = tuple(int(x, base=16) for x in color_match.groups())
+            #elif printed_match:
+            #     printed_lst = tuple(int(x, base=16) for x in color_match.groups())  
             else:
                 color_lst = self.base_color
 
@@ -294,6 +306,7 @@ class MeshView(vtkmodules.vtkRenderingCore.vtkActor):
             for color_lst in polygon_colors:
                 self.colors.InsertNextTuple(color_lst)
 
+
         if self.smooth:
             pdnorm = vtkmodules.vtkFiltersCore.vtkPolyDataNormals()
             pdnorm.SetInputData(self.polydata)
@@ -304,9 +317,10 @@ class MeshView(vtkmodules.vtkRenderingCore.vtkActor):
             pdnorm.Update()
             polydata = pdnorm.GetOutput()
 
-            
 
         if texture_mapping:
+            #for printed_lst in polygon_colors:
+            #    self.printed.InsertNextTuple(printed_lst)
 
             #https://examples.vtk.org/site/Python/Texture/TextureCutQuadric/
 
@@ -348,10 +362,9 @@ class MeshView(vtkmodules.vtkRenderingCore.vtkActor):
 
 
 
-
-
 class PanelView(MeshView):
     hex_regex = re.compile(r".*#([0-9A-F]{2})([0-9A-F]{2})([0-9A-F]{2})")
+    printed_regex = re.compile(r".*printed")
 
     def __init__(self, panel: Panel, cell: Cell, midribs: int=2) -> None:
         self.cell = cell
@@ -365,12 +378,19 @@ class PanelView(MeshView):
         mesh = openglider.mesh.Mesh()
         panel_mesh = self.panel.get_mesh(self.cell, midribs)
 
+        printed_match = self.printed_regex.match(self.panel.material.name.upper())
+
         if left:
             mesh += panel_mesh
         if right:
             mesh += panel_mesh.copy().mirror("y")
             
-        self.draw_mesh(mesh, texture_mapping=True)
+        if printed_match:
+            self.draw_mesh(mesh, texture_mapping=True)
+        else:
+            self.draw_mesh(mesh, texture_mapping=False)
+
+        logger.info(f"Draw_Printed_Match:{printed_match}")
 
         color_lst = self.panel.material.get_color_rgb()
         self.GetProperty().SetColor(*color_lst)
